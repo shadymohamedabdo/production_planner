@@ -1,387 +1,175 @@
-// screens/planning_screen.dart
-
 import 'package:flutter/material.dart';
-
 import '../algorithms/planning_algorithm..dart';
 import '../models/order.dart';
 import '../models/plan.dart';
-import '../widgets/plan_card.dart';
 
 class PlanningScreen extends StatefulWidget {
   final List<Order> orders;
-
-  const PlanningScreen({
-    Key? key,
-    required this.orders,
-  }) : super(key: key);
+  const PlanningScreen({Key? key, required this.orders}) : super(key: key);
 
   @override
   State<PlanningScreen> createState() => _PlanningScreenState();
 }
 
 class _PlanningScreenState extends State<PlanningScreen> {
-
-  final List<ProductionPlan> _visiblePlans = [];
-
-  final GlobalKey<AnimatedListState> _listKey =
-  GlobalKey<AnimatedListState>();
-
+  List<ProductionPlan> _allPlans = [];
   bool _isGenerating = false;
-
   late List<double> _availableGrams;
-
   late double _selectedPriorityGram;
 
   @override
   void initState() {
     super.initState();
-
-    /// جلب الجرامات المتاحة
-    _availableGrams =
-        widget.orders.map((o) => o.grams).toSet().toList();
-
-    /// ترتيب الجرامات
-    _availableGrams.sort();
-
-    _selectedPriorityGram =
-    _availableGrams.isNotEmpty
-        ? _availableGrams.first
-        : 200.0;
+    _availableGrams = widget.orders.map((o) => o.grams).toSet().toList()..sort();
+    _selectedPriorityGram = _availableGrams.isNotEmpty ? _availableGrams.first : 0.0;
   }
 
-  Future<void> _clearAnimatedList() async {
-
-    for (int i = _visiblePlans.length - 1; i >= 0; i--) {
-
-      final removedItem = _visiblePlans.removeAt(i);
-
-      _listKey.currentState?.removeItem(
-        i,
-            (context, animation) {
-          return SizeTransition(
-            sizeFactor: animation,
-            child: PlanCard(
-              plan: removedItem,
-              index: i,
-            ),
-          );
-        },
-        duration: const Duration(milliseconds: 250),
-      );
-    }
-
-    await Future.delayed(const Duration(milliseconds: 300));
-  }
-
-  Future<void> _startProduction() async {
-    if (_isGenerating) return;
-
+  void _startProduction() {
     setState(() => _isGenerating = true);
-    await _clearAnimatedList();
+    final results = PlanningAlgorithm.generatePlans(widget.orders, [_selectedPriorityGram, ..._availableGrams.where((g) => g != _selectedPriorityGram)]);
+    setState(() {
+      _allPlans = results;
+      _isGenerating = false;
+    });
+  }
 
-    List<double> priority = [_selectedPriorityGram];
-    priority.addAll(_availableGrams.where((g) => g != _selectedPriorityGram));
+  // دالة لتقسيم النقلات لمجموعات (كل ما المقاسات تتغير يعمل جدول جديد)
+  List<List<dynamic>> _groupPlans() {
+    if (_allPlans.isEmpty) return [];
 
-    // تشغيل الخوارزمية المحدثة
-    final allPlans = PlanningAlgorithm.generatePlans(widget.orders, priority);
+    List<List<dynamic>> groups = [];
+    List<int> currentGroupIndices = [0];
 
-    if (allPlans.isEmpty) {
-      // لو لسه مفيش خطط، نظهر رسالة تنبيه
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("لا يوجد طلبات كافية لبدء التشغيل!")),
-      );
-    } else {
-      for (int i = 0; i < allPlans.length; i++) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        _visiblePlans.add(allPlans[i]);
-        _listKey.currentState?.insertItem(_visiblePlans.length - 1);
+    for (int i = 1; i < _allPlans.length; i++) {
+      // بنقارن المقاسات في النقلة الحالية بالنقلة اللي قبلها
+      var currentItems = _allPlans[i].items.map((e) => e.width).toSet();
+      var prevItems = _allPlans[i-1].items.map((e) => e.width).toSet();
+
+      if (currentItems.length == prevItems.length && currentItems.containsAll(prevItems)) {
+        currentGroupIndices.add(i);
+      } else {
+        groups.add(currentGroupIndices);
+        currentGroupIndices = [i];
       }
     }
-
-    setState(() => _isGenerating = false);
-  }
-  Color _getEfficiencyColor(double totalWidth) {
-
-    if (totalWidth >= 4.90) {
-      return Colors.green;
-    }
-
-    if (totalWidth >= 4.85) {
-      return Colors.orange;
-    }
-
-    return Colors.red;
+    groups.add(currentGroupIndices);
+    return groups;
   }
 
   @override
   Widget build(BuildContext context) {
+    var groupedIndices = _groupPlans();
 
     return Scaffold(
-
-      appBar: AppBar(
-        title: const Text(
-          'محاكاة خط الإنتاج',
-        ),
-      ),
-
+      appBar: AppBar(title: const Text('جداول تشغيل الماكينة')),
       body: Column(
-
         children: [
+          _buildHeaderControl(),
+          Expanded(
+            child: _allPlans.isEmpty
+                ? const Center(child: Text("اضغط توليد الجداول لبدء التقسيم"))
+                : ListView.builder(
+              padding: const EdgeInsets.all(10),
+              itemCount: groupedIndices.length,
+              itemBuilder: (context, gIndex) {
+                return _buildBatchTable(groupedIndices[gIndex] as List<int>);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-          /// شريط التحكم العلوي
+  // بناء الجدول المنفصل لكل مجموعة مقاسات
+  Widget _buildBatchTable(List<int> indices) {
+    // أول نقلة عشان نعرف البيانات المشتركة للمجموعة
+    var firstPlan = _allPlans[indices.first];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 30),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.black, width: 1.2), // حدود سوداء واضحة
+      ),
+      child: Column(
+        children: [
+          // صف عناوين الجدول (Header) - نفس ترتيب الصورة
           Container(
-
-            padding: const EdgeInsets.all(15),
-
-            color: Colors.blue.shade50,
-
-            child: Column(
-
-              children: [
-
-                Row(
-
-                  children: [
-
-                    const Text(
-                      "ابدأ بجرام:",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-
-                    const SizedBox(width: 10),
-
-                    DropdownButton<double>(
-
-                      value: _selectedPriorityGram,
-
-                      items: _availableGrams.map((g) {
-
-                        return DropdownMenuItem<double>(
-                          value: g,
-                          child: Text(
-                            g.toString(),
-                          ),
-                        );
-
-                      }).toList(),
-
-                      onChanged: _isGenerating
-                          ? null
-                          : (val) {
-
-                        setState(() {
-                          _selectedPriorityGram = val!;
-                        });
-
-                      },
-                    ),
-
-                    const Spacer(),
-
-                    ElevatedButton.icon(
-
-                      onPressed: _isGenerating
-                          ? null
-                          : _startProduction,
-
-                      icon: Icon(
-                        _isGenerating
-                            ? Icons.settings
-                            : Icons.play_circle_fill,
-                      ),
-
-                      label: Text(
-                        _isGenerating
-                            ? "جاري التشغيل..."
-                            : "تشغيل الماكينة",
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                /// عرض الجرام الحالي
-                Container(
-
-                  width: double.infinity,
-
-                  padding: const EdgeInsets.all(12),
-
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-
-                  child: Row(
-
-                    children: [
-
-                      const Icon(
-                        Icons.factory,
-                        color: Colors.blue,
-                      ),
-
-                      const SizedBox(width: 10),
-
-                      Text(
-                        "الجرام الحالي: $_selectedPriorityGram",
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+            color: Colors.grey.shade300,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: const [
+                Expanded(flex: 1, child: Text("م", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(flex: 3, child: Text("اسم العميل", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(flex: 2, child: Text("الجرام", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(flex: 3, child: Text("المقاسات", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(flex: 2, child: Text("عدد البكر", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(flex: 2, child: Text("الإجمالي", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
+                Expanded(flex: 1, child: Text("هالك", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
               ],
             ),
           ),
+          const Divider(height: 1, color: Colors.black), // خط فاصل أسود
 
-          /// قائمة النقلات
-          Expanded(
+          // عرض النقلات (الأسطر)
+          ...indices.map((idx) {
+            var plan = _allPlans[idx];
 
-            child: _visiblePlans.isEmpty
+            // تجميع أسماء العملاء لو النقلة فيها أكتر من عميل
+            String customerNames = plan.items.map((e) => e.customerName).toSet().join(" / ");
+            // تجميع المقاسات (مثلاً 1.5 + 1.8)
+            String detailedSizes = plan.items.map((e) => e.width).join(" + ");
 
-                ? Center(
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      // رقم النقلة
+                      Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w500))),
 
-              child: Text(
-                _isGenerating
-                    ? "جاري إنشاء خطة التشغيل..."
-                    : "اضغط تشغيل الماكينة",
-                style: const TextStyle(
-                  fontSize: 16,
+                      // اسم العميل
+                      Expanded(flex: 3, child: Text(customerNames, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
+
+                      // الجرام
+                      Expanded(flex: 2, child: Text("${plan.grams.toInt()}", textAlign: TextAlign.center)),
+
+                      // المقاسات (السكاكين)
+                      Expanded(flex: 3, child: Text(detailedSizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+
+                      // عدد البكر في النقلة
+                      Expanded(flex: 2, child: Text("${plan.items.length}", textAlign: TextAlign.center)),
+
+                      // إجمالي عرض النقلة
+                      Expanded(flex: 2, child: Text("${plan.totalWidth.toStringAsFixed(2)}", textAlign: TextAlign.center, style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold))),
+
+                      // الهالك
+                      Expanded(flex: 1, child: Text("${plan.waste.toStringAsFixed(2)}", textAlign: TextAlign.center, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
+                    ],
+                  ),
                 ),
-              ),
-            )
-
-                : AnimatedList(
-
-              key: _listKey,
-
-              initialItemCount: _visiblePlans.length,
-
-              padding: const EdgeInsets.all(10),
-
-              itemBuilder:
-                  (context, index, animation) {
-
-                final plan =
-                _visiblePlans[index];
-
-                return SlideTransition(
-
-                  position: animation.drive(
-
-                    Tween(
-                      begin: const Offset(0, 1),
-                      end: Offset.zero,
-                    ),
-                  ),
-
-                  child: Container(
-
-                    margin: const EdgeInsets.only(
-                      bottom: 12,
-                    ),
-
-                    decoration: BoxDecoration(
-
-                      borderRadius:
-                      BorderRadius.circular(16),
-
-                      border: Border.all(
-                        color: _getEfficiencyColor(
-                          plan.totalWidth,
-                        ),
-                        width: 2,
-                      ),
-                    ),
-
-                    child: Column(
-
-                      children: [
-
-                        /// بيانات التشغيل
-                        Container(
-
-                          padding:
-                          const EdgeInsets.all(12),
-
-                          decoration: BoxDecoration(
-
-                            color: _getEfficiencyColor(
-                              plan.totalWidth,
-                            ).withOpacity(0.08),
-
-                            borderRadius:
-                            const BorderRadius.only(
-                              topLeft:
-                              Radius.circular(16),
-                              topRight:
-                              Radius.circular(16),
-                            ),
-                          ),
-
-                          child: Row(
-
-                            mainAxisAlignment:
-                            MainAxisAlignment
-                                .spaceBetween,
-
-                            children: [
-
-                              Text(
-                                "نقلة ${index + 1}",
-                                style: const TextStyle(
-                                  fontWeight:
-                                  FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-
-                              Column(
-
-                                crossAxisAlignment:
-                                CrossAxisAlignment.end,
-
-                                children: [
-
-                                  Text(
-                                    "الإجمالي: ${plan.totalWidth.toStringAsFixed(2)} م",
-                                  ),
-
-                                  Text(
-                                    "الهالك: ${plan.waste.toStringAsFixed(2)} م",
-                                    style: TextStyle(
-                                      color:
-                                      _getEfficiencyColor(
-                                        plan.totalWidth,
-                                      ),
-                                      fontWeight:
-                                      FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        /// تفاصيل النقلة
-                        PlanCard(
-                          plan: plan,
-                          index: index,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+                // خط فاصل بين كل نقلة والتانية
+                if (idx != indices.last) const Divider(height: 1, color: Colors.black12),
+              ],
+            );
+          }).toList(),
+        ],
+      ),
+    );
+  }
+  Widget _buildHeaderControl() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      color: Colors.white,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text("الجرام: $_selectedPriorityGram", style: const TextStyle(fontWeight: FontWeight.bold)),
+          ElevatedButton.icon(
+            onPressed: _startProduction,
+            icon: const Icon(Icons.bolt),
+            label: Text(_isGenerating ? "جاري الحساب..." : "توليد الجداول"),
           ),
         ],
       ),
