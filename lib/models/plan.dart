@@ -1,26 +1,29 @@
+import 'order.dart';
+
 class ProductionPlan {
-  int? id;
-  DateTime date;
-  double grams;
-  List<PlanItem> items;
-  double totalWidth;
-  double waste;
+  final DateTime date;
+  final double grams;
+  final List<PlanItem> items;
+
+  // ضيف السطرين دول هنا
+  final double totalWidth;
+  final double waste;
 
   ProductionPlan({
-    this.id,
     required this.date,
     required this.grams,
     required this.items,
-  })  : totalWidth = items.fold(0, (sum, item) => sum + (item.width * item.quantity)),
-        waste = (4.95 - items.fold(0, (sum, item) => sum + (item.width * item.quantity)))
-            .clamp(0, 4.95);
+    // وضيفهم في الـ Constructor كدة
+    required this.totalWidth,
+    required this.waste,
+  });
 }
 
 class PlanItem {
   final int orderId;
   final String customerName;
   final double width;
-  int quantity;
+  int quantity; // شلنا final عشان لو حبيت تعدل الكمية برمجياً
 
   PlanItem({
     required this.orderId,

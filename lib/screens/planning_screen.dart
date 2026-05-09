@@ -74,51 +74,32 @@ class _PlanningScreenState extends State<PlanningScreen> {
   }
 
   Future<void> _startProduction() async {
-
     if (_isGenerating) return;
 
-    setState(() {
-      _isGenerating = true;
-    });
-
-    /// تنظيف القائمة القديمة
+    setState(() => _isGenerating = true);
     await _clearAnimatedList();
 
-    /// ترتيب أولويات الجرامات
     List<double> priority = [_selectedPriorityGram];
+    priority.addAll(_availableGrams.where((g) => g != _selectedPriorityGram));
 
-    priority.addAll(
-      _availableGrams.where(
-            (g) => g != _selectedPriorityGram,
-      ),
-    );
+    // تشغيل الخوارزمية المحدثة
+    final allPlans = PlanningAlgorithm.generatePlans(widget.orders, priority);
 
-    /// تشغيل الخوارزمية
-    final allPlans =
-    PlanningAlgorithm.generatePlans(
-      widget.orders,
-      priority,
-    );
-
-    /// عرض النقلات واحدة واحدة
-    for (int i = 0; i < allPlans.length; i++) {
-
-      await Future.delayed(
-        const Duration(milliseconds: 300),
+    if (allPlans.isEmpty) {
+      // لو لسه مفيش خطط، نظهر رسالة تنبيه
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("لا يوجد طلبات كافية لبدء التشغيل!")),
       );
-
-      _visiblePlans.add(allPlans[i]);
-
-      _listKey.currentState?.insertItem(
-        _visiblePlans.length - 1,
-      );
+    } else {
+      for (int i = 0; i < allPlans.length; i++) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        _visiblePlans.add(allPlans[i]);
+        _listKey.currentState?.insertItem(_visiblePlans.length - 1);
+      }
     }
 
-    setState(() {
-      _isGenerating = false;
-    });
+    setState(() => _isGenerating = false);
   }
-
   Color _getEfficiencyColor(double totalWidth) {
 
     if (totalWidth >= 4.90) {

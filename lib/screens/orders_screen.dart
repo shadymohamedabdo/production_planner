@@ -20,12 +20,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
     _loadOrders();
   }
 
+  // تحميل البيانات من الداتا بيز
   Future<void> _loadOrders() async {
     final data = await db.getAllOrders();
     setState(() => _orders = data);
   }
 
-  // 1. دالة حذف طلب واحد
+  // حذف طلب واحد
   Future<void> _deleteOrder(int id) async {
     bool? confirm = await showDialog(
       context: context,
@@ -34,14 +35,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
         content: const Text('هل أنت متأكد من حذف هذا الطلب؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('حذف', style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حذف', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
 
     if (confirm == true) {
-      final database = await db.database;
-      await database.delete('orders', where: 'id = ?', whereArgs: [id]);
+      await db.deleteOrder(id); // تأكد من وجود هذه الدالة في DatabaseHelper
       await _loadOrders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -51,18 +54,21 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
-  // 2. دالة التعديل (فتح الفورم ببيانات الطلب)
+  // تعديل طلب
   Future<void> _editOrder(Order order) async {
     await showDialog(
       context: context,
       builder: (_) => OrderForm(
-        order: order, // تأكد أن OrderForm يقبل параметр order للتعديل
+        order: order,
         onSaved: _loadOrders,
       ),
     );
   }
 
+  // مسح كل الطلبات
   Future<void> _deleteAllOrders() async {
+    if (_orders.isEmpty) return;
+
     bool? confirm = await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -70,13 +76,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
         content: const Text('هل أنت متأكد أنك تريد مسح جميع الطلبات؟ لا يمكن التراجع.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('مسح', style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('مسح الكل', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
+
     if (confirm == true) {
-      final database = await db.database;
-      await database.delete('orders');
+      await db.clearAllOrders(); // دالة لمسح الجدول بالكامل
       await _loadOrders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -90,70 +99,93 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('الطلبات'),
+        title: const Text('سجل الطلبات'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_sweep, color: Colors.red),
+            icon: const Icon(Icons.delete_sweep, color: Colors.white),
             onPressed: _deleteAllOrders,
-            tooltip: 'مسح كل الطلبات',
+            tooltip: 'مسح الكل',
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await showDialog(
             context: context,
             builder: (_) => OrderForm(onSaved: _loadOrders),
           );
         },
+        label: const Text('طلب جديد'),
+        icon: const Icon(Icons.add),
       ),
       body: _orders.isEmpty
-          ? const Center(child: Text('لا توجد طلبات. أضف طلب جديد باستخدام الزر +'))
+          ? Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            const Text('لا توجد طلبات مسجلة حالياً', style: TextStyle(fontSize: 18, color: Colors.grey)),
+          ],
+        ),
+      )
           : RefreshIndicator(
         onRefresh: _loadOrders,
         child: SingleChildScrollView(
+          padding: const EdgeInsets.all(8),
           scrollDirection: Axis.vertical,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columns: const [
-                DataColumn(label: Text('التاريخ')),
-                DataColumn(label: Text('العميل')),
-                DataColumn(label: Text('العرض (م)')),
-                DataColumn(label: Text('الكمية')),
-                DataColumn(label: Text('الجرام')),
-                DataColumn(label: Text('الطن')),
-                DataColumn(label: Text('الحالة')),
-                DataColumn(label: Text('الإجراءات')), // عمود جديد
-              ],
-              rows: _orders.map((o) => DataRow(cells: [
-                DataCell(Text(o.date.toLocal().toString().split(' ')[0])),
-                DataCell(Text(o.customerName)),
-                DataCell(Text(o.width.toString())),
-                DataCell(Text(o.quantity.toString())),
-                DataCell(Text(o.grams.toString())),
-                DataCell(Text(o.totalTons.toString())),
-                DataCell(Icon(
-                  o.isPlanned ? Icons.check_circle : Icons.pending,
-                  color: o.isPlanned ? Colors.green : Colors.orange,
-                )),
-                DataCell(
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => _editOrder(o),
+          child: Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
+                columnSpacing: 20,
+                columns: const [
+                  DataColumn(label: Text('التاريخ', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('العميل', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('العرض (م)', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('الكمية', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('الجرام', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('الحالة', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: _orders.map((o) => DataRow(cells: [
+                  DataCell(Text(o.date.toString().split(' ')[0])),
+                  DataCell(Text(o.customerName)),
+                  DataCell(Text(o.width.toStringAsFixed(2))),
+                  DataCell(Text(o.quantity.toString())),
+                  DataCell(Text('${o.grams}g')),
+                  DataCell(
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: o.isPlanned ? Colors.green.shade100 : Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _deleteOrder(o.id!),
+                      child: Text(
+                        o.isPlanned ? "مجدول" : "قيد الانتظار",
+                        style: TextStyle(color: o.isPlanned ? Colors.green.shade900 : Colors.orange.shade900, fontSize: 12),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ])).toList(),
+                  DataCell(
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                          onPressed: () => _editOrder(o),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                          onPressed: () => _deleteOrder(o.id!),
+                        ),
+                      ],
+                    ),
+                  ),
+                ])).toList(),
+              ),
             ),
           ),
         ),

@@ -17,6 +17,9 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDB() async {
+    // تشغيل ffi للـ Desktop لو مش شغال
+    // sqfliteFfiInit();
+
     final dir = await getApplicationDocumentsDirectory();
     final path = join(dir.path, 'production_planning.db');
     return await openDatabase(
@@ -39,18 +42,49 @@ class DatabaseHelper {
     );
   }
 
-  // إدراج طلب جديد
+  // --- العمليات الأساسية (CRUD) ---
+
+  // 1. إدراج طلب جديد
   Future<int> insertOrder(Order order) async {
     final db = await database;
     return await db.insert('orders', order.toMap());
   }
 
-  // جلب جميع الطلبات
+  // 2. تعديل طلب موجود (مهم جداً لزرار التعديل في الشاشة)
+  Future<int> updateOrder(Order order) async {
+    final db = await database;
+    return await db.update(
+      'orders',
+      order.toMap(),
+      where: 'id = ?',
+      whereArgs: [order.id],
+    );
+  }
+
+  // 3. حذف طلب واحد
+  Future<int> deleteOrder(int id) async {
+    final db = await database;
+    return await db.delete(
+      'orders',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // 4. مسح جميع الطلبات (دالة الـ Sweep)
+  Future<int> clearAllOrders() async {
+    final db = await database;
+    return await db.delete('orders');
+  }
+
+  // 5. جلب جميع الطلبات للسجل
   Future<List<Order>> getAllOrders() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('orders', orderBy: 'date DESC');
     return List.generate(maps.length, (i) => Order.fromMap(maps[i]));
   }
+
+  // --- عمليات الخوارزمية (Algorithm Helpers) ---
 
   // جلب الطلبات غير المجدولة حسب الجرام
   Future<List<Order>> getUnplannedOrdersByGrams(double grams) async {
@@ -59,7 +93,7 @@ class DatabaseHelper {
       'orders',
       where: 'grams = ? AND isPlanned = 0',
       whereArgs: [grams],
-      orderBy: 'width DESC',
+      orderBy: 'width DESC', // الترتيب من الأكبر للأصغر يساعد الخوارزمية (FFD)
     );
     return List.generate(maps.length, (i) => Order.fromMap(maps[i]));
   }
@@ -71,15 +105,17 @@ class DatabaseHelper {
     return result.map((row) => row['grams'] as double).toList();
   }
 
-  // تحديث حالة الطلبات إلى "تم التخطيط"
+  // تحديث حالة مجموعة طلبات إلى "تم التخطيط"
   Future<void> markOrdersAsPlanned(List<int> orderIds) async {
     final db = await database;
+    Batch batch = db.batch(); // استخدام الـ Batch أسرع في التحديثات الكثيرة
     for (var id in orderIds) {
-      await db.update('orders', {'isPlanned': 1}, where: 'id = ?', whereArgs: [id]);
+      batch.update('orders', {'isPlanned': 1}, where: 'id = ?', whereArgs: [id]);
     }
+    await batch.commit(noResult: true);
   }
 
-  // إعادة تعيين جميع الطلبات إلى غير مجدولة (للاختبار)
+  // إعادة تعيين جميع الطلبات إلى غير مجدولة (لأغراض إعادة التخطيط)
   Future<void> resetPlanned() async {
     final db = await database;
     await db.update('orders', {'isPlanned': 0});
