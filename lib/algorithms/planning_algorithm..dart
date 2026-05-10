@@ -2,8 +2,9 @@ import '../models/order.dart';
 import '../models/plan.dart';
 
 class PlanningAlgorithm {
-  static const double maxMachineWidth = 4.95;
-  static const double minMachineWidth = 4.80;
+  // التعديل الأول: القيم الجديدة للماكينة
+  static const double maxMachineWidth = 5.00; // الحد الأقصى
+  static const double minMachineWidth = 4.70; // الحد الأدنى المطلق
 
   static List<ProductionPlan> generatePlans(
       List<Order> orders,
@@ -17,55 +18,64 @@ class PlanningAlgorithm {
 
       Map<double, int> inventory = {};
       for (var order in gramOrders) {
-        inventory[order.width] = (inventory[order.width] ?? 0) + order.quantity;
+        // بنخزن المقاس بالمتر عشان الحسبة تظبط (بقسم على 100 لو المقاس بالسنتي)
+        double widthInMeters = order.width / 100;
+        inventory[widthInMeters] = (inventory[widthInMeters] ?? 0) + order.quantity;
       }
-
-      List<double> preferredWidths = [];
-      int planCounter = 1;
 
       while (inventory.values.any((q) => q > 0)) {
         List<double> availableWidths = inventory.keys.where((w) => inventory[w]! > 0).toList();
 
-        // ترتيب المقاسات لضمان الأولوية للمقاسات الكبيرة أو اللي كانت شغالة
-        availableWidths = sortWidthsByPreference(availableWidths, preferredWidths);
-
-        // البحث عن أفضل توليفة (مع تفعيل نظام المرونة)
+        // البحث عن أفضل توليفة في النطاق (4.70 - 5.00)
         CombinationResult bestResult = findBestCombination(availableWidths, inventory);
 
-        // لو مفيش أي حاجة خالص (المخزن خلص)
-        if (bestResult.widths.isEmpty) break;
+        // التعديل الجوهري: لو المجموع أقل من 4.70 نوقف ولا ننتج هذه الخطة
+        if (bestResult.widths.isEmpty || bestResult.total < minMachineWidth) {
+          print("لا توجد توليفة كافية للمقاسات المتبقية في نطاق التشغيل.");
+          break;
+        }
 
         double currentTotal = bestResult.total;
         List<PlanItem> currentItems = [];
 
+// ... داخل دالة generatePlans ...
+
+// ... داخل دالة generatePlans وتحديداً داخل الـ for loop الخاص بـ widths ...
+
         for (double width in bestResult.widths) {
           inventory[width] = inventory[width]! - 1;
-          int existingIndex = currentItems.indexWhere((e) => e.width == width);
+
+          double widthInCm = width * 100;
+          // البحث عن العميل صاحب هذا المقاس في الأوردرات
+          var originalOrder = gramOrders.firstWhere((o) => o.width == widthInCm);
+
+          // البحث إذا كان هذا المقاس (بنفس العرض) موجود مسبقاً في قائمة النقلة الحالية
+          int existingIndex = currentItems.indexWhere((e) => e.width == widthInCm);
 
           if (existingIndex != -1) {
+            // المقاس موجود مسبقاً، نزود الكمية فقط
             currentItems[existingIndex].quantity++;
+
+            // ملاحظة: لو حابب تجمع الأسامي هنا، لازم الحقل ميكونش final
+            // أو الأفضل إننا نعتمد على اسم العميل الأول للمقاس ده في العرض
           } else {
+            // إضافة مقاس جديد للنقلة باسم صاحبه الحقيقي
             currentItems.add(PlanItem(
-              orderId: 0,
-              customerName: "طلب مجمع",
-              width: width,
+              orderId: originalOrder.id ?? 0,
+              customerName: originalOrder.customerName, // اسم العميل الحقيقي
+              width: widthInCm,
               quantity: 1,
             ));
           }
-        }
-
-        preferredWidths = bestResult.widths;
-        finalPlans.add(
+        }        finalPlans.add(
           ProductionPlan(
             date: DateTime.now(),
             grams: targetGram,
             items: currentItems,
-            // بنحسب التوتال والواست هنا عشان الموديل يقرأهم صح
             totalWidth: currentTotal,
             waste: maxMachineWidth - currentTotal,
           ),
         );
-        planCounter++;
       }
     }
     return finalPlans;
@@ -75,60 +85,37 @@ class PlanningAlgorithm {
       List<double> widths,
       Map<double, int> inventory,
       ) {
-    CombinationResult bestPerfect = CombinationResult([], 0, false);
-    CombinationResult bestAlternative = CombinationResult([], 0, false);
+    CombinationResult best = CombinationResult([], 0, false);
 
     void backtrack(int index, List<double> current, double total) {
+      // لو عدينا الـ 5 متر، ده حل مرفوض
       if (total > maxMachineWidth) return;
 
-      // تحديث أفضل البدائل (الأقرب للحد المطلوب)
-      if (total > bestAlternative.total) {
-        bestAlternative = CombinationResult(List.from(current), total, true);
-      }
-
-      // لو دخلنا الرينج المثالي
+      // لو المجموع بين 4.70 و 5.00، بنشوف لو ده أفضل من اللي لقيناه قبل كده
       if (total >= minMachineWidth && total <= maxMachineWidth) {
-        if (total > bestPerfect.total) {
-          bestPerfect = CombinationResult(List.from(current), total, true);
+        if (total > best.total) {
+          best = CombinationResult(List.from(current), total, true);
         }
       }
 
-      // التغيير هنا: بنمر على المقاسات بالترتيب (index)
-      // وكل مقاس بناخد منه بكرة واحدة بس في النقلة دي
       for (int i = index; i < widths.length; i++) {
-        double width = widths[i];
+        double w = widths[i];
+        if (inventory[w]! > 0) {
+          inventory[w] = inventory[w]! - 1; // "احجز" بكرة للتجربة
+          current.add(w);
 
-        // التأكد إن المقاس لسه موجود في المخزن
-        if (inventory[width]! > 0) {
-          // جرب تاخد بكرة واحدة بس
-          current.add(width);
-
-          // الانتقال للمقاس اللي بعده (i + 1) عشان نضمن عدم التكرار في نفس النقلة
-          backtrack(i + 1, current, total + width);
+          backtrack(i, current, total + w); // i وليس i+1 لو مسموح بتكرار نفس المقاس في الرصة
 
           current.removeLast();
+          inventory[w] = inventory[w]! + 1; // "فك الحجز"
         }
       }
     }
 
-    // بنبدأ من أول مقاس (index 0)
     backtrack(0, [], 0);
-
-    return bestPerfect.total > 0 ? bestPerfect : bestAlternative;
-  }
-
-  static List<double> sortWidthsByPreference(List<double> widths, List<double> preferred) {
-    widths.sort((a, b) {
-      bool aPref = preferred.contains(a);
-      bool bPref = preferred.contains(b);
-      if (aPref && !bPref) return -1;
-      if (!aPref && bPref) return 1;
-      return b.compareTo(a); // من الأكبر للأصغر
-    });
-    return widths;
+    return best;
   }
 }
-
 class CombinationResult {
   final List<double> widths;
   final double total;
