@@ -144,9 +144,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 columns: const [
                   DataColumn(label: Text('التاريخ', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('العميل', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('العرض', style: TextStyle(fontWeight: FontWeight.bold))), // عمود العرض المُضاف
+                  DataColumn(label: Text('العرض', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('الجرام', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('الطن', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('الوزن الإجمالي', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('القطر', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('متوسط الوزن', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('بكر', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -154,16 +154,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   DataColumn(label: Text('إجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
                 ],
                 rows: _orders.map((o) {
-                  // حساب متوسط الوزن للعرض فقط (القطر * معامل الوزن)
-                  double avgRollWeight = o.diameter * o.diameterWeight;
+                  // حسابات العرض في الجدول
+                  double avgRollWeight = o.width * o.diameterWeight; // المتوسط الجديد: العرض × معامل القطر
+                  double totalWeightInKilo = o.totalTons * 1000; // تحويل الطن لكيلو
 
                   return DataRow(cells: [
                     DataCell(Text(o.date.toString().split(' ')[0])),
                     DataCell(Text(o.customerName)),
-                    DataCell(Text(o.width.toStringAsFixed(2))), // خلية العرض المُضافة
+                    DataCell(Text('${o.width.toInt()} سم')),
                     DataCell(Text('${o.grams.toInt()}g')),
-                    DataCell(Text(o.totalTons.toStringAsFixed(2))),
-                    DataCell(Text('${o.diameter} سم')),
+                    DataCell(Text('${totalWeightInKilo.toInt()} ك')),
+                    DataCell(Text('${o.diameter.toInt()} سم')),
                     DataCell(Text('${avgRollWeight.toStringAsFixed(1)} ك')),
                     DataCell(Text(o.quantity.toString())),
                     DataCell(

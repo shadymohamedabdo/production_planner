@@ -4,26 +4,17 @@ import '../database/database_helper.dart';
 
 class OrderForm extends StatefulWidget {
   final VoidCallback onSaved;
-  final Order? order;
+  final Order? order; // رجعنا السطر ده عشان التعديل يشتغل
 
-  OrderForm({required this.onSaved, this.order});
+  OrderForm({required this.onSaved, this.order}); // أضفنا this.order هنا
 
   @override
   _OrderFormState createState() => _OrderFormState();
 }
 
 class _OrderFormState extends State<OrderForm> {
-  final _formKey = GlobalKey<FormState>();
-
-  // المدخلات الأساسية
   final _customerController = TextEditingController();
-  final _widthController = TextEditingController();
-  final _quantityController = TextEditingController(); // محسوب تلقائياً
-  final _gramsController = TextEditingController();
-  final _tonsController = TextEditingController();
-  DateTime _selectedDate = DateTime.now();
-
-  double? _selectedDiameter;
+  final List<Map<String, dynamic>> _orderRows = [];
   final Map<double, double> _diameterSpecs = {
     120.0: 8.0,
     125.0: 8.5,
@@ -34,44 +25,59 @@ class _OrderFormState extends State<OrderForm> {
   void initState() {
     super.initState();
     if (widget.order != null) {
+      // حالة التعديل: بنملى البيانات من الأوردر اللي جاي
       _customerController.text = widget.order!.customerName;
-      _widthController.text = widget.order!.width.toString();
-      _quantityController.text = widget.order!.quantity.toString();
-      _gramsController.text = widget.order!.grams.toString();
-      _tonsController.text = widget.order!.totalTons.toString();
-      _selectedDate = widget.order!.date;
-      _selectedDiameter = widget.order!.diameter;
+      _orderRows.add({
+        'width': TextEditingController(text: widget.order!.width.toString()),
+        'grams': TextEditingController(text: widget.order!.grams.toString()),
+        'tons': TextEditingController(text: widget.order!.totalTons.toString()),
+        'qty': TextEditingController(text: widget.order!.quantity.toString()),
+        'diameter': widget.order!.diameter,
+      });
     } else {
-      _selectedDiameter = 120.0; // القيمة الافتراضية
+      // حالة إضافة جديد
+      _addNewRow();
     }
   }
 
-  // دالة الحساب التلقائي لعدد البكر
-  void _calculateAutoFields() {
-    if (_tonsController.text.isNotEmpty && _selectedDiameter != null) {
-      try {
-        double inputTons = double.parse(_tonsController.text);
-        double kiloFactor = _diameterSpecs[_selectedDiameter!]!;
-        double avgWeight = _selectedDiameter! * kiloFactor; // متوسط وزن البكرة
+  void _addNewRow() {
+    setState(() {
+      _orderRows.add({
+        'width': TextEditingController(),
+        'grams': TextEditingController(),
+        'tons': TextEditingController(),
+        'qty': TextEditingController(),
+        'diameter': 120.0,
+      });
+    });
+  }
 
-        if (inputTons != 0) {
-          // عدد البكر = متوسط الوزن / رقم الطن (حسب طلبك)
-          double rawQty = avgWeight / inputTons;
-          setState(() {
-            _quantityController.text = rawQty.round().toString();
-          });
-        }
-      } catch (e) {}
+  void _calculateRow(int index) {
+    var row = _orderRows[index];
+    double tons = double.tryParse(row['tons'].text) ?? 0;
+    double width = double.tryParse(row['width'].text) ?? 0;
+    double kiloFactor = _diameterSpecs[row['diameter']] ?? 0;
+
+    if (tons > 0 && width > 0) {
+      double totalWeightKilo = tons * 1000;
+      double avgRollWeight = width * kiloFactor;
+      double res = totalWeightKilo /avgRollWeight ;
+
+      setState(() {
+        row['qty'].text = res.round().toString();
+      });
     }
   }
 
   @override
   void dispose() {
     _customerController.dispose();
-    _widthController.dispose();
-    _quantityController.dispose();
-    _gramsController.dispose();
-    _tonsController.dispose();
+    for (var row in _orderRows) {
+      row['width'].dispose();
+      row['grams'].dispose();
+      row['tons'].dispose();
+      row['qty'].dispose();
+    }
     super.dispose();
   }
 
@@ -80,107 +86,60 @@ class _OrderFormState extends State<OrderForm> {
     final isEditing = widget.order != null;
 
     return AlertDialog(
-      title: Text(isEditing ? 'تعديل الطلب' : 'إضافة طلب جديد'),
-      content: Form(
-        key: _formKey,
-        child: SizedBox(
-          width: 400, // تحديد عرض مناسب للفورم
-          child: SingleChildScrollView( // عشان لو الشاشة صغيرة المستخدم يقدر يسكرول
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 1. اسم العميل
-                TextFormField(
-                  controller: _customerController,
-                  decoration: const InputDecoration(labelText: 'اسم العميل', prefixIcon: Icon(Icons.person)),
-                  validator: (v) => v!.isEmpty ? 'مطلوب' : null,
-                ),
-                const SizedBox(height: 10),
-
-                // 2. اختيار القطر
-                DropdownButtonFormField<double>(
-                  value: _selectedDiameter,
-                  decoration: const InputDecoration(labelText: 'القطر (سم)', prefixIcon: Icon(Icons.straighten)),
-                  items: _diameterSpecs.keys.map((d) => DropdownMenuItem(
-                      value: d,
-                      child: Text("$d سم (يعادل ${_diameterSpecs[d]} ك)")
-                  )).toList(),
-                  onChanged: (val) {
-                    setState(() => _selectedDiameter = val);
-                    _calculateAutoFields();
-                  },
-                ),
-                const SizedBox(height: 10),
-
-                // 3. العرض والجرام في سطر واحد
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _widthController,
-                        decoration: const InputDecoration(labelText: 'العرض (م)'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) => v!.isEmpty ? 'مطلوب' : null,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _gramsController,
-                        decoration: const InputDecoration(labelText: 'الجرام'),
-                        keyboardType: TextInputType.number,
-                        validator: (v) => v!.isEmpty ? 'مطلوب' : null,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-
-                // 4. الطن وعدد البكر (المحسوب)
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _tonsController,
-                        decoration: const InputDecoration(labelText: 'الطن'),
-                        keyboardType: TextInputType.number,
-                        onChanged: (v) => _calculateAutoFields(),
-                        validator: (v) => v!.isEmpty ? 'مطلوب' : null,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _quantityController,
-                        decoration: const InputDecoration(
-                          labelText: 'عدد البكر',
-                          filled: true,
-                          fillColor: Colors.blueGrey,
+      title: Text(isEditing ? 'تعديل الطلب' : 'إضافة أوردرات متعددة'),
+      content: SizedBox(
+        width: 900,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _customerController,
+                decoration: const InputDecoration(labelText: 'اسم العميل', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
+              ),
+              const SizedBox(height: 20),
+              const Divider(thickness: 2),
+              ..._orderRows.asMap().entries.map((entry) {
+                int idx = entry.key;
+                var row = entry.value;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButton<double>(
+                          value: row['diameter'],
+                          isExpanded: true,
+                          items: _diameterSpecs.keys.map((d) => DropdownMenuItem(value: d, child: Text('$d سم'))).toList(),
+                          onChanged: (val) {
+                            setState(() => row['diameter'] = val);
+                            _calculateRow(idx);
+                          },
                         ),
-                        readOnly: true, // للقراءة فقط لأنه محسوب
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 5),
+                      Expanded(flex: 2, child: TextField(controller: row['width'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'العرض', border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
+                      const SizedBox(width: 5),
+                      Expanded(flex: 2, child: TextField(controller: row['grams'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الجرام', border: OutlineInputBorder()))),
+                      const SizedBox(width: 5),
+                      Expanded(flex: 2, child: TextField(controller: row['tons'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الطن', border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
+                      const SizedBox(width: 5),
+                      Expanded(flex: 1, child: TextField(controller: row['qty'], readOnly: true, textAlign: TextAlign.center, decoration: InputDecoration(fillColor: Colors.grey[200], filled: true, border: const OutlineInputBorder()))),
+                      // في حالة التعديل بنخفي زرار الحذف عشان بنعدل سطر واحد بس
+                      if (!isEditing)
+                        IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => setState(() => _orderRows.removeAt(idx))),
+                    ],
+                  ),
+                );
+              }).toList(),
+              if (!isEditing)
+                ElevatedButton.icon(
+                  onPressed: _addNewRow,
+                  icon: const Icon(Icons.add_box),
+                  label: const Text('إضافة مقاس جديد للعميل'),
                 ),
-                const SizedBox(height: 10),
-
-                // 5. التاريخ
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('التاريخ: ${_selectedDate.toLocal().toString().split(' ')[0]}'),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _selectedDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2030),
-                    );
-                    if (picked != null) setState(() => _selectedDate = picked);
-                  },
-                ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -188,18 +147,20 @@ class _OrderFormState extends State<OrderForm> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
         ElevatedButton(
           onPressed: () async {
-            if (_formKey.currentState!.validate()) {
+            if (_customerController.text.isEmpty) return;
+
+            for (var row in _orderRows) {
               final order = Order(
-                id: widget.order?.id,
-                date: _selectedDate,
+                id: isEditing ? widget.order!.id : null, // لو تعديل بنبعت الـ ID
                 customerName: _customerController.text,
-                width: double.parse(_widthController.text),
-                quantity: int.parse(_quantityController.text),
-                grams: double.parse(_gramsController.text),
-                totalTons: double.parse(_tonsController.text),
-                diameter: _selectedDiameter!,
-                diameterWeight: _diameterSpecs[_selectedDiameter!]!,
-                isPlanned: widget.order?.isPlanned ?? false,
+                date: isEditing ? widget.order!.date : DateTime.now(),
+                width: double.parse(row['width'].text),
+                quantity: int.tryParse(row['qty'].text) ?? 0,
+                grams: double.tryParse(row['grams'].text) ?? 0,
+                totalTons: double.parse(row['tons'].text),
+                diameter: row['diameter'],
+                diameterWeight: _diameterSpecs[row['diameter']]!,
+                isPlanned: isEditing ? widget.order!.isPlanned : false,
               );
 
               if (isEditing) {
@@ -207,11 +168,11 @@ class _OrderFormState extends State<OrderForm> {
               } else {
                 await DatabaseHelper().insertOrder(order);
               }
-              widget.onSaved();
-              Navigator.pop(context);
             }
+            widget.onSaved();
+            Navigator.pop(context);
           },
-          child: Text(isEditing ? 'تحديث' : 'حفظ الطلب'),
+          child: Text(isEditing ? 'تحديث البيانات' : 'حفظ الكل'),
         ),
       ],
     );
