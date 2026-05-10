@@ -17,14 +17,12 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDB() async {
-    // تشغيل ffi للـ Desktop لو مش شغال
-    // sqfliteFfiInit();
-
     final dir = await getApplicationDocumentsDirectory();
     final path = join(dir.path, 'production_planning.db');
+
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // رفعنا الإصدار لـ 2 عشان نحدث الجدول
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE orders(
@@ -35,9 +33,18 @@ class DatabaseHelper {
             quantity INTEGER,
             grams REAL,
             totalTons REAL,
-            isPlanned INTEGER
+            isPlanned INTEGER,
+            diameter REAL,        -- العمود الجديد
+            diameterWeight REAL   -- العمود الجديد
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          // لو المستخدم عنده قاعدة بيانات قديمة، بنزود الأعمدة الجديدة من غير ما نمسح بياناته
+          await db.execute('ALTER TABLE orders ADD COLUMN diameter REAL DEFAULT 120.0');
+          await db.execute('ALTER TABLE orders ADD COLUMN diameterWeight REAL DEFAULT 8.0');
+        }
       },
     );
   }
@@ -47,10 +54,11 @@ class DatabaseHelper {
   // 1. إدراج طلب جديد
   Future<int> insertOrder(Order order) async {
     final db = await database;
+    // بما إننا حدثنا toMap في موديل Order، البيانات هتنزل هنا أوتوماتيك
     return await db.insert('orders', order.toMap());
   }
 
-  // 2. تعديل طلب موجود (مهم جداً لزرار التعديل في الشاشة)
+  // 2. تعديل طلب موجود
   Future<int> updateOrder(Order order) async {
     final db = await database;
     return await db.update(
@@ -71,7 +79,7 @@ class DatabaseHelper {
     );
   }
 
-  // 4. مسح جميع الطلبات (دالة الـ Sweep)
+  // 4. مسح جميع الطلبات
   Future<int> clearAllOrders() async {
     final db = await database;
     return await db.delete('orders');
@@ -86,36 +94,32 @@ class DatabaseHelper {
 
   // --- عمليات الخوارزمية (Algorithm Helpers) ---
 
-  // جلب الطلبات غير المجدولة حسب الجرام
   Future<List<Order>> getUnplannedOrdersByGrams(double grams) async {
     final db = await database;
     final maps = await db.query(
       'orders',
       where: 'grams = ? AND isPlanned = 0',
       whereArgs: [grams],
-      orderBy: 'width DESC', // الترتيب من الأكبر للأصغر يساعد الخوارزمية (FFD)
+      orderBy: 'width DESC',
     );
     return List.generate(maps.length, (i) => Order.fromMap(maps[i]));
   }
 
-  // الحصول على قائمة الجرامات الفريدة للطلبات غير المجدولة
   Future<List<double>> getDistinctGrams() async {
     final db = await database;
     final result = await db.rawQuery('SELECT DISTINCT grams FROM orders WHERE isPlanned = 0');
     return result.map((row) => row['grams'] as double).toList();
   }
 
-  // تحديث حالة مجموعة طلبات إلى "تم التخطيط"
   Future<void> markOrdersAsPlanned(List<int> orderIds) async {
     final db = await database;
-    Batch batch = db.batch(); // استخدام الـ Batch أسرع في التحديثات الكثيرة
+    Batch batch = db.batch();
     for (var id in orderIds) {
       batch.update('orders', {'isPlanned': 1}, where: 'id = ?', whereArgs: [id]);
     }
     await batch.commit(noResult: true);
   }
 
-  // إعادة تعيين جميع الطلبات إلى غير مجدولة (لأغراض إعادة التخطيط)
   Future<void> resetPlanned() async {
     final db = await database;
     await db.update('orders', {'isPlanned': 0});

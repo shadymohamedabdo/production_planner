@@ -20,7 +20,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     _loadOrders();
   }
 
-  // تحميل البيانات من الداتا بيز
+  // تحميل البيانات المحدثة من الداتا بيز
   Future<void> _loadOrders() async {
     final data = await db.getAllOrders();
     setState(() => _orders = data);
@@ -44,7 +44,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
 
     if (confirm == true) {
-      await db.deleteOrder(id); // تأكد من وجود هذه الدالة في DatabaseHelper
+      await db.deleteOrder(id);
       await _loadOrders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -85,7 +85,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
 
     if (confirm == true) {
-      await db.clearAllOrders(); // دالة لمسح الجدول بالكامل
+      await db.clearAllOrders();
       await _loadOrders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -133,7 +133,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
         onRefresh: _loadOrders,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(8),
-          scrollDirection: Axis.vertical,
           child: Card(
             elevation: 4,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -141,50 +140,61 @@ class _OrdersScreenState extends State<OrdersScreen> {
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 headingRowColor: MaterialStateProperty.all(Colors.blue.shade50),
-                columnSpacing: 20,
+                columnSpacing: 15,
                 columns: const [
                   DataColumn(label: Text('التاريخ', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('العميل', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('العرض (م)', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('الكمية', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('العرض', style: TextStyle(fontWeight: FontWeight.bold))), // عمود العرض المُضاف
                   DataColumn(label: Text('الجرام', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('الطن', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('القطر', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('متوسط الوزن', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('بكر', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('الحالة', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('الإجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('إجراءات', style: TextStyle(fontWeight: FontWeight.bold))),
                 ],
-                rows: _orders.map((o) => DataRow(cells: [
-                  DataCell(Text(o.date.toString().split(' ')[0])),
-                  DataCell(Text(o.customerName)),
-                  DataCell(Text(o.width.toStringAsFixed(2))),
-                  DataCell(Text(o.quantity.toString())),
-                  DataCell(Text('${o.grams}g')),
-                  DataCell(
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: o.isPlanned ? Colors.green.shade100 : Colors.orange.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        o.isPlanned ? "مجدول" : "قيد الانتظار",
-                        style: TextStyle(color: o.isPlanned ? Colors.green.shade900 : Colors.orange.shade900, fontSize: 12),
+                rows: _orders.map((o) {
+                  // حساب متوسط الوزن للعرض فقط (القطر * معامل الوزن)
+                  double avgRollWeight = o.diameter * o.diameterWeight;
+
+                  return DataRow(cells: [
+                    DataCell(Text(o.date.toString().split(' ')[0])),
+                    DataCell(Text(o.customerName)),
+                    DataCell(Text(o.width.toStringAsFixed(2))), // خلية العرض المُضافة
+                    DataCell(Text('${o.grams.toInt()}g')),
+                    DataCell(Text(o.totalTons.toStringAsFixed(2))),
+                    DataCell(Text('${o.diameter} سم')),
+                    DataCell(Text('${avgRollWeight.toStringAsFixed(1)} ك')),
+                    DataCell(Text(o.quantity.toString())),
+                    DataCell(
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: o.isPlanned ? Colors.green.shade100 : Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          o.isPlanned ? "مجدول" : "انتظار",
+                          style: TextStyle(color: o.isPlanned ? Colors.green.shade900 : Colors.orange.shade900, fontSize: 11),
+                        ),
                       ),
                     ),
-                  ),
-                  DataCell(
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                          onPressed: () => _editOrder(o),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                          onPressed: () => _deleteOrder(o.id!),
-                        ),
-                      ],
+                    DataCell(
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
+                            onPressed: () => _editOrder(o),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                            onPressed: () => _deleteOrder(o.id!),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ])).toList(),
+                  ]);
+                }).toList(),
               ),
             ),
           ),
