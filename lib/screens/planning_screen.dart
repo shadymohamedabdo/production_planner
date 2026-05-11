@@ -30,7 +30,16 @@ class _PlanningScreenState extends State<PlanningScreen> {
   void initState() {
     super.initState();
     _currentOrders = List.from(widget.orders);
+    _loadSavedPlans();
     _updateAvailableGrams();
+  }
+  Future<void> _loadSavedPlans() async {
+    final savedPlans = await db.getSavedPlans();
+    if (savedPlans.isNotEmpty) {
+      setState(() {
+        _allPlans = savedPlans;
+      });
+    }
   }
 
 // داخل _updateAvailableGrams بعد الفرز
@@ -73,6 +82,9 @@ class _PlanningScreenState extends State<PlanningScreen> {
       }
     }
 
+    // ✅ حفظ جميع الخطط مرة واحدة (بدلاً من insertProductionPlan لكل خطة)
+    await db.saveProductionPlans(plans);
+
     // إعادة تحميل الطلبات بعد التحديث
     final updatedOrders = await db.getAllOrders();
     setState(() {
@@ -84,7 +96,6 @@ class _PlanningScreenState extends State<PlanningScreen> {
 
     widget.onDataChanged();
   }
-
   List<Order> _getWaitingOrders() {
     return _currentOrders.where((o) => o.status == 'انتظار' && o.quantity > 0).toList();
   }

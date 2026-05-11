@@ -58,17 +58,22 @@ class _OrderFormState extends State<OrderForm> {
     double width = double.tryParse(row['width'].text) ?? 0;
     double kiloFactor = _diameterSpecs[row['diameter']] ?? 0;
 
-    if (tons > 0 && width > 0) {
+    if (tons > 0 && width > 0 && kiloFactor > 0) {
+      // 1. تحويل الطن لكيلو (البسط)
       double totalWeightKilo = tons * 1000;
+
+      // 2. حساب وزن البكرة الواحدة (المقام)
       double avgRollWeight = width * kiloFactor;
-      double res = totalWeightKilo /avgRollWeight ;
+
+      // 3. القسمة: الإجمالي على وزن البكرة الواحدة
+      double res = totalWeightKilo / avgRollWeight;
 
       setState(() {
+        // نستخدم round لتقريب النتيجة لأقرب رقم صحيح
         row['qty'].text = res.round().toString();
       });
     }
   }
-
   @override
   void dispose() {
     _customerController.dispose();

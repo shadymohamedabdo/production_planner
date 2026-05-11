@@ -1,15 +1,18 @@
 import 'order.dart';
 
 class ProductionPlan {
+  int? id; // معرف فريد للخطة
   final DateTime date;
   final double grams;
-  final List<PlanItem> items;
+   List<PlanItem> items;
 
   // ضيف السطرين دول هنا
   final double totalWidth;
   final double waste;
 
   ProductionPlan({
+    this.id,
+
     required this.date,
     required this.grams,
     required this.items,
