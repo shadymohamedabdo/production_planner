@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import '../algorithms/planning_algorithm..dart';
 import '../models/order.dart';
 import '../models/plan.dart';
+import '../database/database_helper.dart';
 
 class PlanningScreen extends StatefulWidget {
   final List<Order> orders;
-  const PlanningScreen({super.key, required this.orders});
+  final VoidCallback onDataChanged;
+
+  const PlanningScreen({super.key, required this.orders, required this.onDataChanged});
 
   @override
   State<PlanningScreen> createState() => _PlanningScreenState();
@@ -16,33 +19,74 @@ class _PlanningScreenState extends State<PlanningScreen> {
   bool _isGenerating = false;
   late List<double> _availableGrams;
   late double _selectedPriorityGram;
+  List<Order> _currentOrders = [];
 
   static const double machineMaxWidth = 5.00;
   static const double machineMinWidth = 4.70;
 
+  final db = DatabaseHelper();
+
   @override
   void initState() {
     super.initState();
-    _availableGrams = widget.orders.map((o) => o.grams).toSet().toList()..sort();
-    _selectedPriorityGram = _availableGrams.isNotEmpty ? _availableGrams.first : 0.0;
+    _currentOrders = List.from(widget.orders);
+    _updateAvailableGrams();
   }
 
-  void _startProduction() {
+// داخل _updateAvailableGrams بعد الفرز
+  void _updateAvailableGrams() {
+    _availableGrams = _currentOrders
+        .where((o) => o.status == 'انتظار' && o.quantity > 0)
+        .map((o) => o.grams)
+        .toSet()
+        .toList()
+      ..sort();
+    if (_availableGrams.isNotEmpty) {
+      _selectedPriorityGram = _availableGrams.first;
+    } else {
+      _selectedPriorityGram = 0.0; // قيمة افتراضية آمنة
+    }
+  }
+  Future<void> _startProduction() async {
+    if (_isGenerating) return;
     setState(() => _isGenerating = true);
-    final results = PlanningAlgorithm.generatePlans(
-        widget.orders,
-        [_selectedPriorityGram, ..._availableGrams.where((g) => g != _selectedPriorityGram)]
-    );
 
+    // أولويات الجرامات
+    List<double> priority = [
+      _selectedPriorityGram,
+      ..._availableGrams.where((g) => g != _selectedPriorityGram)
+    ];
+
+    // الطلبات المتبقية (حالة انتظار وكمية > 0)
+    final ordersToPlan = _currentOrders
+        .where((o) => o.status == 'انتظار' && o.quantity > 0)
+        .toList();
+
+    final plans = PlanningAlgorithm.generatePlans(ordersToPlan, priority);
+
+    // استهلاك كل بكرة تم استخدامها في الخطة
+    for (var plan in plans) {
+      for (var item in plan.items) {
+        if (item.orderId != 0) {
+          await db.consumeOrder(item.orderId);
+        }
+      }
+    }
+
+    // إعادة تحميل الطلبات بعد التحديث
+    final updatedOrders = await db.getAllOrders();
     setState(() {
-      _allPlans = results;
+      _currentOrders = updatedOrders;
+      _updateAvailableGrams();
+      _allPlans = plans;
       _isGenerating = false;
     });
+
+    widget.onDataChanged();
   }
 
-  // دالة لفلترة المقاسات اللي ملقيتش "شريك" وفضلت في حالة انتظار
   List<Order> _getWaitingOrders() {
-    return widget.orders.where((o) => o.status == "انتظار").toList();
+    return _currentOrders.where((o) => o.status == 'انتظار' && o.quantity > 0).toList();
   }
 
   double get _totalWaste => _allPlans.fold(0, (sum, plan) => sum + (machineMaxWidth - plan.totalWidth));
@@ -61,11 +105,11 @@ class _PlanningScreenState extends State<PlanningScreen> {
 
     for (int i = 1; i < _allPlans.length; i++) {
       var currentItems = _allPlans[i].items.map((e) => e.width).toList()..sort();
-      var prevItems = _allPlans[i-1].items.map((e) => e.width).toList()..sort();
+      var prevItems = _allPlans[i - 1].items.map((e) => e.width).toList()..sort();
 
       if (currentItems.length == prevItems.length &&
           _compareLists(currentItems, prevItems) &&
-          _allPlans[i].grams == _allPlans[i-1].grams) {
+          _allPlans[i].grams == _allPlans[i - 1].grams) {
         currentGroupIndices.add(i);
       } else {
         groups.add(currentGroupIndices);
@@ -100,7 +144,6 @@ class _PlanningScreenState extends State<PlanningScreen> {
               padding: const EdgeInsets.all(10),
               child: Column(
                 children: [
-                  // عرض الجداول المجمعة
                   if (_allPlans.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 60),
@@ -115,8 +158,6 @@ class _PlanningScreenState extends State<PlanningScreen> {
                         return _buildBatchTable(groupedIndices[gIndex]);
                       },
                     ),
-
-                  // عرض قسم بواقي المقاسات (الانتظار)
                   if (waitingOrders.isNotEmpty) ...[
                     const SizedBox(height: 25),
                     const Divider(thickness: 2, color: Colors.redAccent),
@@ -259,7 +300,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
           ...indices.map((idx) {
             var plan = _allPlans[idx];
             String allCustomerNames = plan.items.map((e) => e.customerName).toSet().join(" + ");
-            String detailedSizes = plan.items.map((e) => (e.width).toInt().toString()).join(" + ");
+            String detailedSizes = plan.items.map((e) => e.width.toInt().toString()).join(" + ");
 
             return Container(
               color: idx % 2 == 0 ? Colors.white : Colors.grey.shade50,
