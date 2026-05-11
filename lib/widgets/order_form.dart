@@ -4,17 +4,18 @@ import '../database/database_helper.dart';
 
 class OrderForm extends StatefulWidget {
   final VoidCallback onSaved;
-  final Order? order; // رجعنا السطر ده عشان التعديل يشتغل
+  final Order? order;
 
-  OrderForm({required this.onSaved, this.order}); // أضفنا this.order هنا
+  const OrderForm({super.key, required this.onSaved, this.order});
 
   @override
-  _OrderFormState createState() => _OrderFormState();
+  State<OrderForm> createState() => _OrderFormState();
 }
 
 class _OrderFormState extends State<OrderForm> {
   final _customerController = TextEditingController();
   final List<Map<String, dynamic>> _orderRows = [];
+
   final Map<double, double> _diameterSpecs = {
     120.0: 8.0,
     125.0: 8.5,
@@ -25,9 +26,10 @@ class _OrderFormState extends State<OrderForm> {
   void initState() {
     super.initState();
     if (widget.order != null) {
-      // حالة التعديل: بنملى البيانات من الأوردر اللي جاي
+      // حالة التعديل
       _customerController.text = widget.order!.customerName;
       _orderRows.add({
+        'salesOrder': TextEditingController(text: widget.order!.salesOrder ?? ''),
         'width': TextEditingController(text: widget.order!.width.toString()),
         'grams': TextEditingController(text: widget.order!.grams.toString()),
         'tons': TextEditingController(text: widget.order!.totalTons.toString()),
@@ -35,7 +37,6 @@ class _OrderFormState extends State<OrderForm> {
         'diameter': widget.order!.diameter,
       });
     } else {
-      // حالة إضافة جديد
       _addNewRow();
     }
   }
@@ -43,6 +44,7 @@ class _OrderFormState extends State<OrderForm> {
   void _addNewRow() {
     setState(() {
       _orderRows.add({
+        'salesOrder': TextEditingController(), // أضفنا الكنترولر هنا في كل سطر
         'width': TextEditingController(),
         'grams': TextEditingController(),
         'tons': TextEditingController(),
@@ -56,54 +58,75 @@ class _OrderFormState extends State<OrderForm> {
     var row = _orderRows[index];
     double tons = double.tryParse(row['tons'].text) ?? 0;
     double width = double.tryParse(row['width'].text) ?? 0;
-    double kiloFactor = _diameterSpecs[row['diameter']] ?? 0;
+    double diamWeight = _diameterSpecs[row['diameter']] ?? 0;
 
-    if (tons > 0 && width > 0 && kiloFactor > 0) {
-      // 1. تحويل الطن لكيلو (البسط)
-      double totalWeightKilo = tons * 1000;
-
-      // 2. حساب وزن البكرة الواحدة (المقام)
-      double avgRollWeight = width * kiloFactor;
-
-      // 3. القسمة: الإجمالي على وزن البكرة الواحدة
-      double res = totalWeightKilo / avgRollWeight;
-
-      setState(() {
-        // نستخدم round لتقريب النتيجة لأقرب رقم صحيح
-        row['qty'].text = res.round().toString();
-      });
+    if (tons > 0 && width > 0 && diamWeight > 0) {
+      double rollWeight = width * diamWeight;
+      int calculatedQty = (tons * 1000 / rollWeight).round();
+      row['qty'].text = calculatedQty.toString();
     }
   }
+
+  @override
   @override
   void dispose() {
+    // التأكد من إغلاق الكنترولر الرئيسي
     _customerController.dispose();
+
+    // التأكد من إغلاق كنترولرات الصفوف بشكل آمن
     for (var row in _orderRows) {
-      row['width'].dispose();
-      row['grams'].dispose();
-      row['tons'].dispose();
-      row['qty'].dispose();
+      // علامة الـ ?. بتضمن إن لو الكنترولر null مش هيضرب error
+      row['salesOrder']?.dispose();
+      row['width']?.dispose();
+      row['grams']?.dispose();
+      row['tons']?.dispose();
+      row['qty']?.dispose();
     }
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.order != null;
-
     return AlertDialog(
       title: Text(isEditing ? 'تعديل الطلب' : 'إضافة أوردرات متعددة'),
       content: SizedBox(
-        width: 900,
+        width: 1100, // زيادة العرض قليلاً لتناسب الخانة الجديدة
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: _customerController,
-                decoration: const InputDecoration(labelText: 'اسم العميل', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
+                decoration: const InputDecoration(
+                    labelText: 'اسم العميل',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person)
+                ),
               ),
               const SizedBox(height: 20),
               const Divider(thickness: 2),
+
+              // عناوين الخانات لتسهيل القراءة
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                child: Row(
+                  children: const [
+                    Expanded(flex: 2, child: Text("رقم أمر البيع (S.O)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                    SizedBox(width: 5),
+                    Expanded(flex: 2, child: Text("القطر", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                    SizedBox(width: 5),
+                    Expanded(flex: 2, child: Text("العرض (سم)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                    SizedBox(width: 5),
+                    Expanded(flex: 2, child: Text("الجرام", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                    SizedBox(width: 5),
+                    Expanded(flex: 2, child: Text("الوزن (طن)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                    SizedBox(width: 5),
+                    Expanded(flex: 1, child: Text("بكر", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                    SizedBox(width: 40),
+                  ],
+                ),
+              ),
+
               ..._orderRows.asMap().entries.map((entry) {
                 int idx = entry.key;
                 var row = entry.value;
@@ -111,11 +134,20 @@ class _OrderFormState extends State<OrderForm> {
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: Row(
                     children: [
+                      // خانة Sales Order لكل سطر
                       Expanded(
                         flex: 2,
-                        child: DropdownButton<double>(
+                        child: TextField(
+                          controller: row['salesOrder'],
+                          decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'S.O #'),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<double>(
                           value: row['diameter'],
-                          isExpanded: true,
+                          decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 5)),
                           items: _diameterSpecs.keys.map((d) => DropdownMenuItem(value: d, child: Text('$d سم'))).toList(),
                           onChanged: (val) {
                             setState(() => row['diameter'] = val);
@@ -124,14 +156,13 @@ class _OrderFormState extends State<OrderForm> {
                         ),
                       ),
                       const SizedBox(width: 5),
-                      Expanded(flex: 2, child: TextField(controller: row['width'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'العرض', border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
+                      Expanded(flex: 2, child: TextField(controller: row['width'], keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
                       const SizedBox(width: 5),
-                      Expanded(flex: 2, child: TextField(controller: row['grams'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الجرام', border: OutlineInputBorder()))),
+                      Expanded(flex: 2, child: TextField(controller: row['grams'], keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder()))),
                       const SizedBox(width: 5),
-                      Expanded(flex: 2, child: TextField(controller: row['tons'], keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الطن', border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
+                      Expanded(flex: 2, child: TextField(controller: row['tons'], keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
                       const SizedBox(width: 5),
                       Expanded(flex: 1, child: TextField(controller: row['qty'], readOnly: true, textAlign: TextAlign.center, decoration: InputDecoration(fillColor: Colors.grey[200], filled: true, border: const OutlineInputBorder()))),
-                      // في حالة التعديل بنخفي زرار الحذف عشان بنعدل سطر واحد بس
                       if (!isEditing)
                         IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => setState(() => _orderRows.removeAt(idx))),
                     ],
@@ -142,7 +173,7 @@ class _OrderFormState extends State<OrderForm> {
                 ElevatedButton.icon(
                   onPressed: _addNewRow,
                   icon: const Icon(Icons.add_box),
-                  label: const Text('إضافة مقاس جديد للعميل'),
+                  label: const Text('إضافة مقاس/أمر بيع جديد'),
                 ),
             ],
           ),
@@ -153,35 +184,25 @@ class _OrderFormState extends State<OrderForm> {
         ElevatedButton(
           onPressed: () async {
             if (_customerController.text.trim().isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('برجاء إدخال اسم العميل')),
-              );
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('برجاء إدخال اسم العميل')));
               return;
-            }
-
-            for (var row in _orderRows) {
-              if (row['width'].text.isEmpty || row['tons'].text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('برجاء أكمل بيانات العرض والوزن لكل المقاسات')),
-                );
-                return;
-              }
             }
 
             try {
               for (var row in _orderRows) {
-                // تأكد أن تعريف الكائن هنا يطابق الموديل الجديد تماماً
                 final order = Order(
                   id: isEditing ? widget.order!.id : null,
-                  customerName: _customerController.text.trim(),
                   date: isEditing ? widget.order!.date : DateTime.now(),
+                  customerName: _customerController.text.trim(),
+                  // سحب رقم أمر البيع من السطر نفسه
+                  salesOrder: row['salesOrder'].text.trim(),
                   width: double.parse(row['width'].text),
                   quantity: int.parse(row['qty'].text),
                   grams: double.tryParse(row['grams'].text) ?? 0,
                   totalTons: double.parse(row['tons'].text),
                   diameter: row['diameter'],
                   diameterWeight: _diameterSpecs[row['diameter']]!,
-                  status: isEditing ? widget.order!.status : "انتظار", // تأكد أن الموديل يستقبل status
+                  status: isEditing ? widget.order!.status : "انتظار",
                 );
 
                 if (isEditing) {
@@ -190,22 +211,15 @@ class _OrderFormState extends State<OrderForm> {
                   await DatabaseHelper().insertOrder(order);
                 }
               }
-
               widget.onSaved();
               Navigator.pop(context);
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(isEditing ? 'تم تحديث البيانات' : 'تم حفظ الطلبات بنجاح')),
-              );
             } catch (e) {
-              // هنا الـ Error اللي ظهرلك في الصورة هيتم صيده وطباعته
-              print("Error during save: $e");
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
-              );
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red));
             }
           },
           child: Text(isEditing ? 'تحديث البيانات' : 'حفظ الكل'),
-        )      ],    );
+        ),
+      ],
+    );
   }
 }

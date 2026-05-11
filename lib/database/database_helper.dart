@@ -23,14 +23,15 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4, // رفعنا الإصدار لـ 4 لإضافة جداول الخطط
+      version: 5,  // رفع الإصدار لـ 5 لإضافة عمود salesOrder
       onCreate: (db, version) async {
-        // جدول الطلبات
+        // جدول الطلبات مع جميع الأعمدة (بما فيها salesOrder)
         await db.execute('''
           CREATE TABLE orders(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT,
             customerName TEXT,
+            salesOrder TEXT,
             width REAL,
             quantity INTEGER,
             grams REAL,
@@ -40,7 +41,7 @@ class DatabaseHelper {
             diameterWeight REAL
           )
         ''');
-        // جدول خطط الإنتاج (رأس الخطة)
+        // جدول خطط الإنتاج
         await db.execute('''
           CREATE TABLE production_plans(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,7 +51,7 @@ class DatabaseHelper {
             waste REAL
           )
         ''');
-        // جدول تفاصيل الخطة (عناصر الخطة)
+        // جدول تفاصيل الخطة
         await db.execute('''
           CREATE TABLE plan_items(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,6 +64,7 @@ class DatabaseHelper {
         ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        // ترقية من إصدار أقل من 3 (إضافة status, diameter, diameterWeight)
         if (oldVersion < 3) {
           try {
             await db.execute("ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'انتظار'");
@@ -74,6 +76,7 @@ class DatabaseHelper {
             await db.execute("ALTER TABLE orders ADD COLUMN diameterWeight REAL DEFAULT 0");
           } catch (e) {}
         }
+        // ترقية من إصدار 3 إلى 4 (إنشاء جداول الخطط)
         if (oldVersion < 4) {
           try {
             await db.execute('''
@@ -95,6 +98,12 @@ class DatabaseHelper {
                 quantity INTEGER
               )
             ''');
+          } catch (e) {}
+        }
+        // ترقية من إصدار 4 إلى 5 (إضافة عمود salesOrder)
+        if (oldVersion < 5) {
+          try {
+            await db.execute("ALTER TABLE orders ADD COLUMN salesOrder TEXT");
           } catch (e) {}
         }
       },
@@ -173,14 +182,11 @@ class DatabaseHelper {
 
   // ======================== عمليات خطط الإنتاج (Production Plans) ========================
 
-  // ======================== عمليات خطط الإنتاج (Production Plans) ========================
-
   Future<void> saveProductionPlans(List<ProductionPlan> plans) async {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('production_plans');
       await txn.delete('plan_items');
-
       for (var plan in plans) {
         final planId = await txn.insert('production_plans', {
           'date': plan.date.toIso8601String(),
@@ -204,7 +210,6 @@ class DatabaseHelper {
   Future<List<ProductionPlan>> getSavedPlans() async {
     final db = await database;
     final plansMap = <int, ProductionPlan>{};
-
     final plansResult = await db.query('production_plans', orderBy: 'date DESC');
     for (var p in plansResult) {
       final id = p['id'] as int;
@@ -217,9 +222,7 @@ class DatabaseHelper {
         waste: p['waste'] as double,
       );
     }
-
     if (plansMap.isEmpty) return [];
-
     final itemsResult = await db.query('plan_items');
     for (var item in itemsResult) {
       final planId = item['planId'] as int;
@@ -232,7 +235,6 @@ class DatabaseHelper {
         ));
       }
     }
-
     return plansMap.values.toList();
   }
 

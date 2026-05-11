@@ -2,10 +2,11 @@ class Order {
   int? id;
   DateTime date;
   String customerName;
+  String? salesOrder;         // إضافة رقم أمر البيع
   double width;
   int quantity;
   double grams;
-  String status; // غيرنا isPlanned لـ status
+  String status;
   double totalTons;
   final double diameter;
   final double diameterWeight;
@@ -14,11 +15,12 @@ class Order {
     this.id,
     required this.date,
     required this.customerName,
+    this.salesOrder,
     required this.width,
     required this.quantity,
     required this.grams,
     required this.totalTons,
-    this.status = "انتظار", // القيمة الافتراضية نصية
+    this.status = "انتظار",
     required this.diameter,
     required this.diameterWeight,
   });
@@ -27,11 +29,12 @@ class Order {
     'id': id,
     'date': date.toIso8601String(),
     'customerName': customerName,
+    'salesOrder': salesOrder,
     'width': width,
     'quantity': quantity,
     'grams': grams,
     'totalTons': totalTons,
-    'status': status, // بنبعت النص للداتا بيز
+    'status': status,
     'diameter': diameter,
     'diameterWeight': diameterWeight,
   };
@@ -40,12 +43,13 @@ class Order {
     id: map['id'],
     date: DateTime.parse(map['date']),
     customerName: map['customerName'],
+    salesOrder: map['salesOrder'],
     width: (map['width'] as num).toDouble(),
     quantity: map['quantity'],
     grams: (map['grams'] as num).toDouble(),
     totalTons: (map['totalTons'] as num).toDouble(),
-    status: map['status'] ?? 'انتظار', // بنستلم النص
-    diameter: (map['diameter'] as num?)?.toDouble() ?? 120.0,
-    diameterWeight: (map['diameterWeight'] as num?)?.toDouble() ?? 8.0,
+    status: map['status'] ?? 'انتظار',
+    diameter: (map['diameter'] as num?)?.toDouble() ?? 0.0,
+    diameterWeight: (map['diameterWeight'] as num?)?.toDouble() ?? 0.0,
   );
 }
