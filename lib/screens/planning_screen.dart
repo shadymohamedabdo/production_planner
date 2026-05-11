@@ -5,7 +5,7 @@ import '../models/plan.dart';
 
 class PlanningScreen extends StatefulWidget {
   final List<Order> orders;
-  const PlanningScreen({Key? key, required this.orders}) : super(key: key);
+  const PlanningScreen({super.key, required this.orders});
 
   @override
   State<PlanningScreen> createState() => _PlanningScreenState();
@@ -17,7 +17,6 @@ class _PlanningScreenState extends State<PlanningScreen> {
   late List<double> _availableGrams;
   late double _selectedPriorityGram;
 
-  // الثوابت الجديدة لضمان دقة الحسابات في الواجهة
   static const double machineMaxWidth = 5.00;
   static const double machineMinWidth = 4.70;
 
@@ -41,6 +40,11 @@ class _PlanningScreenState extends State<PlanningScreen> {
     });
   }
 
+  // دالة لفلترة المقاسات اللي ملقيتش "شريك" وفضلت في حالة انتظار
+  List<Order> _getWaitingOrders() {
+    return widget.orders.where((o) => o.status == "انتظار").toList();
+  }
+
   double get _totalWaste => _allPlans.fold(0, (sum, plan) => sum + (machineMaxWidth - plan.totalWidth));
 
   String get _efficiency {
@@ -50,7 +54,6 @@ class _PlanningScreenState extends State<PlanningScreen> {
     return "${((totalWidthUsed / maxPotential) * 100).toStringAsFixed(1)}%";
   }
 
-  // دالة تجميع النقلات المتشابهة (نفس المقاسات ونفس الجرام)
   List<List<int>> _groupPlans() {
     if (_allPlans.isEmpty) return [];
     List<List<int>> groups = [];
@@ -83,6 +86,7 @@ class _PlanningScreenState extends State<PlanningScreen> {
   @override
   Widget build(BuildContext context) {
     var groupedIndices = _groupPlans();
+    var waitingOrders = _getWaitingOrders();
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -92,17 +96,75 @@ class _PlanningScreenState extends State<PlanningScreen> {
           _buildHeaderControl(),
           if (_allPlans.isNotEmpty) _buildStatisticsCards(),
           Expanded(
-            child: _allPlans.isEmpty
-                ? const Center(child: Text("لا توجد جداول متاحة في النطاق المطلوب (4.70 - 5.00)"))
-                : ListView.builder(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(10),
-              itemCount: groupedIndices.length,
-              itemBuilder: (context, gIndex) {
-                return _buildBatchTable(groupedIndices[gIndex]);
-              },
+              child: Column(
+                children: [
+                  // عرض الجداول المجمعة
+                  if (_allPlans.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 60),
+                      child: Text("لا توجد جداول متاحة في النطاق المطلوب (4.70 - 5.00)"),
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: groupedIndices.length,
+                      itemBuilder: (context, gIndex) {
+                        return _buildBatchTable(groupedIndices[gIndex]);
+                      },
+                    ),
+
+                  // عرض قسم بواقي المقاسات (الانتظار)
+                  if (waitingOrders.isNotEmpty) ...[
+                    const SizedBox(height: 25),
+                    const Divider(thickness: 2, color: Colors.redAccent),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.inventory_2, color: Colors.red),
+                          const SizedBox(width: 8),
+                          Text(
+                            "بواقي المقاسات (في الانتظار)",
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade900, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _buildWaitingOrdersList(waitingOrders),
+                    const SizedBox(height: 40),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWaitingOrdersList(List<Order> waiting) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.red.shade100),
+      ),
+      child: Column(
+        children: waiting.map((order) {
+          return ListTile(
+            dense: true,
+            leading: CircleAvatar(
+              backgroundColor: Colors.red.shade50,
+              child: Text("${order.width.toInt()}", style: const TextStyle(fontSize: 12, color: Colors.red)),
+            ),
+            title: Text(order.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text("المقاس: ${order.width} سم | الجرام: ${order.grams.toInt()}"),
+            trailing: Text("باقي: ${order.quantity} بكرة", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          );
+        }).toList(),
       ),
     );
   }
@@ -175,42 +237,23 @@ class _PlanningScreenState extends State<PlanningScreen> {
         border: Border.all(color: Colors.blueGrey.shade100),
       ),
       child: ExpansionTile(
-        // 1. نقل سهم الفتح والقفال لجهة اليسار (عشان العنوان يبدأ من اليمين براحته)
         controlAffinity: ListTileControlAffinity.leading,
-
-        // 2. تعديل العنوان ليكون مرتباً من اليمين لليسار
         title: Directionality(
           textDirection: TextDirection.rtl,
           child: Row(
             children: [
-              Text(
-                "${indices.length} ",
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                    fontSize: 18
-                ),
-              ),
+              Text("${indices.length} ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 18)),
               Text(
                 "طقم | جرام: ${firstPlanInBatch.grams.toInt()} | عرض: $headerSizes م",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blueGrey.shade900,
-                  fontSize: 15,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey.shade900, fontSize: 15),
               ),
             ],
           ),
         ),
-
         subtitle: Directionality(
           textDirection: TextDirection.rtl,
-          child: Text(
-            "إجمالي الاطقم من ${indices.first + 1} إلى ${indices.last + 1}",
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          ),
+          child: Text("إجمالي الاطقم من ${indices.first + 1} إلى ${indices.last + 1}", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
         ),
-
         children: [
           _buildTableHeader(),
           ...indices.map((idx) {
@@ -224,32 +267,11 @@ class _PlanningScreenState extends State<PlanningScreen> {
               child: Row(
                 children: [
                   Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center)),
-                  Expanded(
-                    flex: 3,
-                    child: Text(
-                      allCustomerNames,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
-                    ),
-                  ),
+                  Expanded(flex: 3, child: Text(allCustomerNames, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500))),
                   Expanded(flex: 2, child: Text("${plan.grams.toInt()}", textAlign: TextAlign.center)),
-                  Expanded(
-                    flex: 4,
-                    child: Text(
-                      detailedSizes,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo),
-                    ),
-                  ),
+                  Expanded(flex: 4, child: Text(detailedSizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo))),
                   Expanded(flex: 2, child: Text("${plan.totalWidth.toStringAsFixed(2)} م", textAlign: TextAlign.center)),
-                  Expanded(
-                    flex: 1,
-                    child: Text(
-                      "${(machineMaxWidth - plan.totalWidth).toStringAsFixed(2)}",
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ),
+                  Expanded(flex: 1, child: Text("${(machineMaxWidth - plan.totalWidth).toStringAsFixed(2)}", textAlign: TextAlign.center, style: const TextStyle(color: Colors.red))),
                 ],
               ),
             );
@@ -257,7 +279,9 @@ class _PlanningScreenState extends State<PlanningScreen> {
         ],
       ),
     );
-  }  Widget _buildTableHeader() {
+  }
+
+  Widget _buildTableHeader() {
     return Container(
       color: Colors.grey.shade100,
       padding: const EdgeInsets.symmetric(vertical: 10),

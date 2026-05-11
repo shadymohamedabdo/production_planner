@@ -5,10 +5,10 @@ class Order {
   double width;
   int quantity;
   double grams;
+  String status; // غيرنا isPlanned لـ status
   double totalTons;
-  bool isPlanned;
-  final double diameter;       // القطر (120, 125, 140)
-  final double diameterWeight; // الوزن المعادل (8, 8.5, 11.5)
+  final double diameter;
+  final double diameterWeight;
 
   Order({
     this.id,
@@ -18,12 +18,11 @@ class Order {
     required this.quantity,
     required this.grams,
     required this.totalTons,
-    this.isPlanned = false,
+    this.status = "انتظار", // القيمة الافتراضية نصية
     required this.diameter,
     required this.diameterWeight,
   });
 
-  // تحويل الكائن إلى Map لتخزينه في قاعدة البيانات
   Map<String, dynamic> toMap() => {
     'id': id,
     'date': date.toIso8601String(),
@@ -32,22 +31,21 @@ class Order {
     'quantity': quantity,
     'grams': grams,
     'totalTons': totalTons,
-    'isPlanned': isPlanned ? 1 : 0,
-    'diameter': diameter,             // ضفنا السطر ده
-    'diameterWeight': diameterWeight, // ضفنا السطر ده
+    'status': status, // بنبعت النص للداتا بيز
+    'diameter': diameter,
+    'diameterWeight': diameterWeight,
   };
 
-  // تحويل الـ Map القادم من قاعدة البيانات إلى كائن Order
   factory Order.fromMap(Map<String, dynamic> map) => Order(
     id: map['id'],
     date: DateTime.parse(map['date']),
     customerName: map['customerName'],
-    width: map['width'],
+    width: (map['width'] as num).toDouble(),
     quantity: map['quantity'],
-    grams: map['grams'],
-    totalTons: map['totalTons'],
-    isPlanned: map['isPlanned'] == 1,
-    diameter: map['diameter'] ?? 120.0,             // ضفنا السطر ده مع قيمة افتراضية
-    diameterWeight: map['diameterWeight'] ?? 8.0,   // ضفنا السطر ده مع قيمة افتراضية
+    grams: (map['grams'] as num).toDouble(),
+    totalTons: (map['totalTons'] as num).toDouble(),
+    status: map['status'] ?? 'انتظار', // بنستلم النص
+    diameter: (map['diameter'] as num?)?.toDouble() ?? 120.0,
+    diameterWeight: (map['diameterWeight'] as num?)?.toDouble() ?? 8.0,
   );
 }

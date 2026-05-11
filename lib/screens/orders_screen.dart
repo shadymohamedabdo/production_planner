@@ -155,8 +155,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ],
                 rows: _orders.map((o) {
                   // حسابات العرض في الجدول
-                  double avgRollWeight = o.width * o.diameterWeight; // المتوسط الجديد: العرض × معامل القطر
-                  double totalWeightInKilo = o.totalTons * 1000; // تحويل الطن لكيلو
+                  double avgRollWeight = o.width * o.diameterWeight;
+                  double totalWeightInKilo = o.totalTons * 1000;
 
                   return DataRow(cells: [
                     DataCell(Text(o.date.toString().split(' ')[0])),
@@ -167,19 +167,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     DataCell(Text('${o.diameter.toInt()} سم')),
                     DataCell(Text('${avgRollWeight.toStringAsFixed(1)} ك')),
                     DataCell(Text(o.quantity.toString())),
+                    // --- بداية الجزء المصلح ---
                     DataCell(
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: o.isPlanned ? Colors.green.shade100 : Colors.orange.shade100,
+                          // بنقارن النص بكلمة "تم الجدول"
+                          color: o.status == "تم الجدول" ? Colors.green.shade100 : Colors.orange.shade100,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          o.isPlanned ? "مجدول" : "انتظار",
-                          style: TextStyle(color: o.isPlanned ? Colors.green.shade900 : Colors.orange.shade900, fontSize: 11),
+                          // بنغير النص بناءً على قيمة الـ status
+                          o.status == "تم الجدول" ? "مجدول" : "انتظار",
+                          style: TextStyle(
+                            color: o.status == "تم الجدول" ? Colors.green.shade900 : Colors.orange.shade900,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                     ),
+                    // --- نهاية الجزء المصلح ---
                     DataCell(
                       Row(
                         children: [

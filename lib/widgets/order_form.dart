@@ -147,34 +147,60 @@ class _OrderFormState extends State<OrderForm> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
         ElevatedButton(
           onPressed: () async {
-            if (_customerController.text.isEmpty) return;
+            if (_customerController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('برجاء إدخال اسم العميل')),
+              );
+              return;
+            }
 
             for (var row in _orderRows) {
-              final order = Order(
-                id: isEditing ? widget.order!.id : null, // لو تعديل بنبعت الـ ID
-                customerName: _customerController.text,
-                date: isEditing ? widget.order!.date : DateTime.now(),
-                width: double.parse(row['width'].text),
-                quantity: int.tryParse(row['qty'].text) ?? 0,
-                grams: double.tryParse(row['grams'].text) ?? 0,
-                totalTons: double.parse(row['tons'].text),
-                diameter: row['diameter'],
-                diameterWeight: _diameterSpecs[row['diameter']]!,
-                isPlanned: isEditing ? widget.order!.isPlanned : false,
-              );
-
-              if (isEditing) {
-                await DatabaseHelper().updateOrder(order);
-              } else {
-                await DatabaseHelper().insertOrder(order);
+              if (row['width'].text.isEmpty || row['tons'].text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('برجاء أكمل بيانات العرض والوزن لكل المقاسات')),
+                );
+                return;
               }
             }
-            widget.onSaved();
-            Navigator.pop(context);
+
+            try {
+              for (var row in _orderRows) {
+                // تأكد أن تعريف الكائن هنا يطابق الموديل الجديد تماماً
+                final order = Order(
+                  id: isEditing ? widget.order!.id : null,
+                  customerName: _customerController.text.trim(),
+                  date: isEditing ? widget.order!.date : DateTime.now(),
+                  width: double.parse(row['width'].text),
+                  quantity: int.parse(row['qty'].text),
+                  grams: double.tryParse(row['grams'].text) ?? 0,
+                  totalTons: double.parse(row['tons'].text),
+                  diameter: row['diameter'],
+                  diameterWeight: _diameterSpecs[row['diameter']]!,
+                  status: isEditing ? widget.order!.status : "انتظار", // تأكد أن الموديل يستقبل status
+                );
+
+                if (isEditing) {
+                  await DatabaseHelper().updateOrder(order);
+                } else {
+                  await DatabaseHelper().insertOrder(order);
+                }
+              }
+
+              widget.onSaved();
+              Navigator.pop(context);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(isEditing ? 'تم تحديث البيانات' : 'تم حفظ الطلبات بنجاح')),
+              );
+            } catch (e) {
+              // هنا الـ Error اللي ظهرلك في الصورة هيتم صيده وطباعته
+              print("Error during save: $e");
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
+              );
+            }
           },
           child: Text(isEditing ? 'تحديث البيانات' : 'حفظ الكل'),
-        ),
-      ],
-    );
+        )      ],    );
   }
 }
