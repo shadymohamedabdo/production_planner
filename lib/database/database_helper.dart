@@ -185,8 +185,7 @@ class DatabaseHelper {
   Future<void> saveProductionPlans(List<ProductionPlan> plans) async {
     final db = await database;
     await db.transaction((txn) async {
-      await txn.delete('production_plans');
-      await txn.delete('plan_items');
+      // شلنا الـ delete من هنا عشان نحافظ على القديم
       for (var plan in plans) {
         final planId = await txn.insert('production_plans', {
           'date': plan.date.toIso8601String(),
@@ -206,11 +205,13 @@ class DatabaseHelper {
       }
     });
   }
-
   Future<List<ProductionPlan>> getSavedPlans() async {
     final db = await database;
     final plansMap = <int, ProductionPlan>{};
-    final plansResult = await db.query('production_plans', orderBy: 'date DESC');
+
+    // الترتيب بـ id DESC عشان أحدث حاجة تظهر في الأول
+    final plansResult = await db.query('production_plans', orderBy: 'id DESC');
+
     for (var p in plansResult) {
       final id = p['id'] as int;
       plansMap[id] = ProductionPlan(
@@ -222,7 +223,9 @@ class DatabaseHelper {
         waste: p['waste'] as double,
       );
     }
+
     if (plansMap.isEmpty) return [];
+
     final itemsResult = await db.query('plan_items');
     for (var item in itemsResult) {
       final planId = item['planId'] as int;
@@ -237,7 +240,6 @@ class DatabaseHelper {
     }
     return plansMap.values.toList();
   }
-
   Future<List<ProductionPlan>> getAllProductionPlans() async {
     return await getSavedPlans();
   }

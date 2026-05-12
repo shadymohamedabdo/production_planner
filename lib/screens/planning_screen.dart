@@ -1,148 +1,193 @@
 import 'package:flutter/material.dart';
-import '../algorithms/planning_algorithm..dart';
-import '../models/order.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../cubit/planning_cubit.dart';
+import '../cubit/planning_state.dart';
 import '../models/plan.dart';
-import '../database/database_helper.dart';
+import '../models/order.dart';
 
-class PlanningScreen extends StatefulWidget {
-  final List<Order> orders;
-  final VoidCallback onDataChanged;
-
-  const PlanningScreen({super.key, required this.orders, required this.onDataChanged});
+class PlanningScreen extends StatelessWidget {
+  const PlanningScreen({super.key});
 
   @override
-  State<PlanningScreen> createState() => _PlanningScreenState();
-}
-
-class _PlanningScreenState extends State<PlanningScreen> {
-  List<ProductionPlan> _displayedPlans = []; // ما يعرض في الواجهة فقط
-  bool _isGenerating = false;
-  bool _isLoading = true;
-  late List<double> _availableGrams;
-  late double _selectedPriorityGram;
-  List<Order> _currentOrders = [];
-
-  static const double machineMaxWidth = 5.00;
-  static const double machineMinWidth = 4.70;
-
-  final db = DatabaseHelper();
-
-  @override
-  void initState() {
-    super.initState();
-    _currentOrders = List.from(widget.orders);
-    _updateAvailableGrams();
-    _loadPlansOnce(); // تحميل مرة واحدة فقط
-  }
-
-  // لا نستخدم didChangeDependencies لتجنب التحميل المتكرر
-  // ولا نستخدم أي استدعاء آخر لـ _loadPlans إلا يدوياً
-
-  Future<void> _loadPlansOnce() async {
-    if (_isGenerating) return;
-    setState(() => _isLoading = true);
-    final plans = await db.getSavedPlans();
-    if (mounted) {
-      setState(() {
-        _displayedPlans = plans;
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _updateAvailableGrams() {
-    _availableGrams = _currentOrders
-        .where((o) => o.status == 'انتظار' && o.quantity > 0)
-        .map((o) => o.grams)
-        .toSet()
-        .toList()
-      ..sort();
-    _selectedPriorityGram = _availableGrams.isNotEmpty ? _availableGrams.first : 0.0;
-  }
-
-  Future<void> _startProduction() async {
-    if (_isGenerating) return;
-
-    setState(() {
-      _isGenerating = true;
-      // لا نفرغ _displayedPlans هنا، نبقيه كما هو حتى ننجح في التوليد
-    });
-
-    try {
-      List<double> priority = [
-        _selectedPriorityGram,
-        ..._availableGrams.where((g) => g != _selectedPriorityGram)
-      ];
-
-      final ordersToPlan = _currentOrders
-          .where((o) => o.status == 'انتظار' && o.quantity > 0)
-          .toList();
-
-      final plans = PlanningAlgorithm.generatePlans(ordersToPlan, priority);
-
-      if (plans.isEmpty) {
-        // لا توجد خطط جديدة نابعة من المخزون الحالي، نعرض رسالة للمستخدم
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('لا يمكن تكوين أي نقلة ضمن النطاق 4.70-5.00 بالمخزون الحالي.')),
-        );
-        setState(() => _isGenerating = false);
-        return;
-      }
-
-      // استهلاك البكرات
-      for (var plan in plans) {
-        for (var item in plan.items) {
-          if (item.orderId != 0) {
-            await db.consumeOrder(item.orderId);
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(
+        title: const Text('جداول تشغيل الماكينة'),
+        elevation: 1,
+        actions: [
+          // زرار مسح السجل (إضافة اختيارية لو تحب)
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+            onPressed: () => _showDeleteConfirmDialog(context),
+            tooltip: 'مسح السجل',
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => context.read<PlanningCubit>().loadData(),
+            tooltip: 'تحديث البيانات من الداتابيز',
+          ),
+        ],
+      ),
+      body: BlocConsumer<PlanningCubit, PlanningState>(
+        buildWhen: (previous, current) => current is PlanningLoading || current is PlanningLoaded,
+        listener: (context, state) {
+          if (state is PlanningError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(state.message), backgroundColor: Colors.red),
+            );
           }
-        }
-      }
-
-      // حفظ الخطط الجديدة (تحل محل القديمة)
-      await db.saveProductionPlans(plans);
-
-      // تحديث الطلبات الحالية والخطط المعروضة
-      final updatedOrders = await db.getAllOrders();
-      if (mounted) {
-        setState(() {
-          _currentOrders = updatedOrders;
-          _updateAvailableGrams();
-          _displayedPlans = plans; // تحديث العرض بالخطط الجديدة
-          _isGenerating = false;
-        });
-      }
-      widget.onDataChanged();
-    } catch (e) {
-      setState(() => _isGenerating = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطأ: $e'), backgroundColor: Colors.red),
-      );
-    }
+        },
+        builder: (context, state) {
+          if (state is PlanningLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state is PlanningLoaded) {
+            return _buildContent(context, state);
+          }
+          return const Center(child: Text("برجاء تهيئة البيانات"));
+        },
+      ),
+    );
   }
 
-  List<Order> _getWaitingOrders() {
-    return _currentOrders.where((o) => o.status == 'انتظار' && o.quantity > 0).toList();
+  Widget _buildContent(BuildContext context, PlanningLoaded state) {
+    final groupedIndices = _groupPlans(state.plans);
+
+    return Column(
+      children: [
+        _buildHeaderControl(context, state),
+        if (state.plans.isNotEmpty) _buildStatisticsCards(state),
+        Expanded(
+          child: CustomScrollView(
+            slivers: [
+              if (state.plans.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Text("لا توجد جداول متاحة. اضغط 'توليد الجداول'.")),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.all(12),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                          (context, gIndex) {
+                        // التعديل الأول: هنا بنمرر الـ context للدالة
+                        return _buildBatchTable(
+                          context,
+                          state.plans,
+                          groupedIndices[gIndex],
+                          key: PageStorageKey('group_${groupedIndices[gIndex].first}'),
+                        );
+                      },
+                      childCount: groupedIndices.length,
+                    ),
+                  ),
+                ),
+              if (state.waitingOrders.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+                    child: _buildWaitingSection(state.waitingOrders),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  double get _totalWaste => _displayedPlans.fold(0, (sum, plan) => sum + (machineMaxWidth - plan.totalWidth));
+  // التعديل الثاني: إضافة BuildContext context لتعريف الدالة
+  Widget _buildBatchTable(BuildContext context, List<ProductionPlan> allPlans, List<int> indices, {Key? key}) {
+    final firstPlan = allPlans[indices.first];
+    final headerSizes = firstPlan.items.map((e) => e.width.toInt().toString()).join(" + ");
 
-  String get _efficiency {
-    if (_displayedPlans.isEmpty) return "0%";
-    double totalWidthUsed = _displayedPlans.fold(0, (sum, plan) => sum + plan.totalWidth);
-    double maxPotential = _displayedPlans.length * machineMaxWidth;
-    return "${((totalWidthUsed / maxPotential) * 100).toStringAsFixed(1)}%";
+    return Container(
+      key: key,
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: false, // مقفول افتراضياً
+          controlAffinity: ListTileControlAffinity.trailing,
+          title: Row(
+            textDirection: TextDirection.rtl, // لضبط ترتيب (الرقم قبل الكلمة)
+            children: [
+              Text(
+                "${indices.length} ",
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 18),
+              ),
+              const Text("طقم", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+              const SizedBox(width: 12),
+              const Text("|", style: TextStyle(color: Colors.grey)),
+              const SizedBox(width: 12),
+              Text(
+                "${firstPlan.grams.toInt()} ",
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey),
+              ),
+              const Text("جرام", style: TextStyle(fontSize: 14)),
+              const SizedBox(width: 12),
+              const Text("|", style: TextStyle(color: Colors.grey)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "رصة: $headerSizes سم",
+                  style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87, fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          subtitle: Text(
+            "من نقلة رقم ${indices.first + 1} إلى ${indices.last + 1}",
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+          ),
+          children: [
+            _buildTableHeader(),
+            ...indices.map((idx) {
+              final plan = allPlans[idx];
+              final customers = plan.items.map((e) => e.customerName).toSet().join(" + ");
+              final sizes = plan.items.map((e) => e.width.toInt().toString()).join(" + ");
+              return Container(
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.grey.shade100)),
+                  color: idx % 2 == 0 ? Colors.white : Colors.grey.shade50,
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                child: Row(
+                  children: [
+                    Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center)),
+                    Expanded(flex: 3, child: Text(customers, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))),
+                    Expanded(flex: 4, child: Text(sizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo))),
+                    Expanded(flex: 2, child: Text(plan.totalWidth.toStringAsFixed(2), textAlign: TextAlign.center)),
+                    Expanded(flex: 1, child: Text(plan.waste.toStringAsFixed(2), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
+                  ],
+                ),
+              );
+            }).toList(),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
-  List<List<int>> _groupPlans() {
-    if (_displayedPlans.isEmpty) return [];
+  // باقي الدوال المساعدة (تجميع، إحصائيات، هيدر...)
+  List<List<int>> _groupPlans(List<ProductionPlan> plans) {
+    if (plans.isEmpty) return [];
     List<List<int>> groups = [];
     List<int> currentGroupIndices = [0];
-    for (int i = 1; i < _displayedPlans.length; i++) {
-      var currentItems = _displayedPlans[i].items.map((e) => e.width).toList()..sort();
-      var prevItems = _displayedPlans[i - 1].items.map((e) => e.width).toList()..sort();
-      if (currentItems.length == prevItems.length &&
-          _compareLists(currentItems, prevItems) &&
-          _displayedPlans[i].grams == _displayedPlans[i - 1].grams) {
+    for (int i = 1; i < plans.length; i++) {
+      final currentItems = plans[i].items.map((e) => e.width).toList()..sort();
+      final prevItems = plans[i - 1].items.map((e) => e.width).toList()..sort();
+      if (currentItems.length == prevItems.length && _compareLists(currentItems, prevItems) && plans[i].grams == plans[i - 1].grams) {
         currentGroupIndices.add(i);
       } else {
         groups.add(currentGroupIndices);
@@ -154,215 +199,88 @@ class _PlanningScreenState extends State<PlanningScreen> {
   }
 
   bool _compareLists(List<double> a, List<double> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if ((a[i] - b[i]).abs() > 0.001) return false;
-    }
+    for (int i = 0; i < a.length; i++) { if ((a[i] - b[i]).abs() > 0.001) return false; }
     return true;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final waitingOrders = _getWaitingOrders();
-    final groupedIndices = _groupPlans();
-
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text('جداول تشغيل الماكينة'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _isGenerating ? null : _loadPlansOnce,
-            tooltip: 'تحديث',
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-        children: [
-          _buildHeaderControl(),
-          if (_displayedPlans.isNotEmpty) _buildStatisticsCards(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                children: [
-                  if (_displayedPlans.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 60),
-                      child: Text("لا توجد جداول متاحة. اضغط 'توليد الجداول'."),
-                    )
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: groupedIndices.length,
-                      itemBuilder: (context, gIndex) {
-                        return _buildBatchTable(groupedIndices[gIndex]);
-                      },
-                    ),
-                  if (waitingOrders.isNotEmpty) ...[
-                    const SizedBox(height: 25),
-                    const Divider(thickness: 2, color: Colors.redAccent),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.inventory_2, color: Colors.red),
-                          const SizedBox(width: 8),
-                          Text(
-                            "بواقي المقاسات (في الانتظار)",
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade900, fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _buildWaitingOrdersList(waitingOrders),
-                    const SizedBox(height: 40),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWaitingOrdersList(List<Order> waiting) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.red.shade100)),
-      child: Column(
-        children: waiting.map((order) => ListTile(
-          dense: true,
-          leading: CircleAvatar(backgroundColor: Colors.red.shade50, child: Text("${order.width.toInt()}", style: const TextStyle(fontSize: 12, color: Colors.red))),
-          title: Text(order.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text("المقاس: ${order.width} سم | الجرام: ${order.grams.toInt()}"),
-          trailing: Text("باقي: ${order.quantity} بكرة", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-        )).toList(),
-      ),
-    );
-  }
-
-  Widget _buildStatisticsCards() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-      child: Row(
-        children: [
-          _buildStatCard("عدد النقلات", "${_displayedPlans.length}", Colors.blue),
-          _buildStatCard("إجمالي الهالك", "${_totalWaste.toStringAsFixed(2)} م", Colors.orange),
-          _buildStatCard("كفاءة التشغيل", _efficiency, Colors.green),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, Color color) {
-    return Expanded(
-      child: Card(
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            children: [
-              Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-              const SizedBox(height: 5),
-              Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeaderControl() {
+  Widget _buildHeaderControl(BuildContext context, PlanningLoaded state) {
     return Container(
       padding: const EdgeInsets.all(12),
       color: Colors.white,
       child: Row(
         children: [
           Expanded(
-            child: DropdownButton<double>(
-              value: _selectedPriorityGram,
-              isExpanded: true,
-              items: _availableGrams.map((g) => DropdownMenuItem(value: g, child: Text("جرام: ${g.toInt()}"))).toList(),
-              onChanged: (val) => setState(() => _selectedPriorityGram = val!),
+            child: DropdownButtonFormField<double>(
+              decoration: const InputDecoration(labelText: "اختر الجرام"),
+              value: state.selectedGram == 0 && state.availableGrams.isNotEmpty ? state.availableGrams.first : state.selectedGram,
+              items: state.availableGrams.map((g) => DropdownMenuItem(value: g, child: Text("جرام: ${g.toInt()}"))).toList(),
+              onChanged: (val) => context.read<PlanningCubit>().changeSelectedGram(val!),
             ),
           ),
           const SizedBox(width: 15),
           ElevatedButton.icon(
-            onPressed: _isGenerating ? null : _startProduction,
-            icon: const Icon(Icons.bolt),
-            label: Text(_isGenerating ? "جاري الحساب..." : "توليد الجداول"),
+            onPressed: state.isGenerating ? null : () => context.read<PlanningCubit>().startGeneration(),
+            icon: state.isGenerating ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.bolt),
+            label: Text(state.isGenerating ? "جاري الحساب..." : "توليد الجداول"),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBatchTable(List<int> indices) {
-    var firstPlanInBatch = _displayedPlans[indices.first];
-    String headerSizes = firstPlanInBatch.items.map((e) => (e.width / 100).toStringAsFixed(1)).join(" + ");
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.blueGrey.shade100)),
-      child: ExpansionTile(
-        controlAffinity: ListTileControlAffinity.leading,
-        title: Directionality(
-          textDirection: TextDirection.rtl,
-          child: Row(
-            children: [
-              Text("${indices.length} ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 18)),
-              Text("طقم | جرام: ${firstPlanInBatch.grams.toInt()} | عرض: $headerSizes م", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey.shade900, fontSize: 15)),
-            ],
-          ),
-        ),
-        subtitle: Directionality(
-          textDirection: TextDirection.rtl,
-          child: Text("إجمالي الاطقم من ${indices.first + 1} إلى ${indices.last + 1}", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-        ),
+  Widget _buildStatisticsCards(PlanningLoaded state) {
+    final totalWaste = state.plans.fold(0.0, (sum, p) => sum + p.waste);
+    final efficiency = state.plans.isEmpty ? 0.0 : (state.plans.fold(0.0, (sum, p) => sum + p.totalWidth) / (state.plans.length * 5.0)) * 100;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
         children: [
-          _buildTableHeader(),
-          ...indices.map((idx) {
-            var plan = _displayedPlans[idx];
-            String allCustomerNames = plan.items.map((e) => e.customerName).toSet().join(" + ");
-            String detailedSizes = plan.items.map((e) => e.width.toInt().toString()).join(" + ");
-            return Container(
-              color: idx % 2 == 0 ? Colors.white : Colors.grey.shade50,
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                children: [
-                  Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center)),
-                  Expanded(flex: 3, child: Text(allCustomerNames, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10))),
-                  Expanded(flex: 2, child: Text("${plan.grams.toInt()}", textAlign: TextAlign.center)),
-                  Expanded(flex: 4, child: Text(detailedSizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo))),
-                  Expanded(flex: 2, child: Text("${plan.totalWidth.toStringAsFixed(2)} م", textAlign: TextAlign.center)),
-                  Expanded(flex: 1, child: Text("${(machineMaxWidth - plan.totalWidth).toStringAsFixed(2)}", textAlign: TextAlign.center, style: const TextStyle(color: Colors.red))),
-                ],
-              ),
-            );
-          }).toList(),
+          _statCard("عدد النقلات", "${state.plans.length}", Colors.blue),
+          _statCard("إجمالي الهالك", "${totalWaste.toStringAsFixed(2)} م", Colors.orange),
+          _statCard("كفاءة التشغيل", "${efficiency.toStringAsFixed(1)}%", Colors.green),
         ],
       ),
     );
   }
+
+  Widget _statCard(String t, String v, Color c) => Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [Text(t, style: const TextStyle(fontSize: 10)), Text(v, style: TextStyle(fontWeight: FontWeight.bold, color: c, fontSize: 16))]))));
 
   Widget _buildTableHeader() {
     return Container(
-      color: Colors.grey.shade100,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: const [
+      color: Colors.blueGrey.shade50,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: const Row(
+        children: [
           Expanded(flex: 1, child: Text("م", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           Expanded(flex: 3, child: Text("العميل", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          Expanded(flex: 2, child: Text("جرام", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          Expanded(flex: 4, child: Text("الرصة (سم)", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          Expanded(flex: 2, child: Text("الإجمالي", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(flex: 4, child: Text("الرصة", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(flex: 2, child: Text("إجمالي", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           Expanded(flex: 1, child: Text("هالك", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWaitingSection(List<Order> waiting) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(thickness: 2),
+        const Padding(padding: EdgeInsets.symmetric(vertical: 8.0), child: Text("المقاسات المتبقية", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 16))),
+        Card(color: Colors.red.shade50, child: Column(children: waiting.map((order) => ListTile(dense: true, title: Text(order.customerName), subtitle: Text("مقاس: ${order.width} | جرام: ${order.grams.toInt()}"), trailing: Text("${order.quantity} بكرة"))).toList())),
+      ],
+    );
+  }
+
+  void _showDeleteConfirmDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("مسح السجل"),
+        content: const Text("هل أنت متأكد؟"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("إلغاء")),
+          ElevatedButton(onPressed: () { context.read<PlanningCubit>().clearHistory(); Navigator.pop(ctx); }, child: const Text("مسح")),
         ],
       ),
     );

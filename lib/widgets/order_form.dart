@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart'; // مكتبة البلوك
+import '../cubit/orders_cubit.dart';
 import '../models/order.dart';
-import '../database/database_helper.dart';
 
 class OrderForm extends StatefulWidget {
-  final VoidCallback onSaved;
   final Order? order;
 
-  const OrderForm({super.key, required this.onSaved, this.order});
+  // شلنا الـ onSaved لأن الكيوبيت بيقوم بالمهمة دي عالمياً
+  const OrderForm({super.key, this.order});
 
   @override
   State<OrderForm> createState() => _OrderFormState();
@@ -26,7 +27,7 @@ class _OrderFormState extends State<OrderForm> {
   void initState() {
     super.initState();
     if (widget.order != null) {
-      // حالة التعديل
+      // حالة التعديل: تعبئة البيانات الموجودة
       _customerController.text = widget.order!.customerName;
       _orderRows.add({
         'salesOrder': TextEditingController(text: widget.order!.salesOrder ?? ''),
@@ -37,6 +38,7 @@ class _OrderFormState extends State<OrderForm> {
         'diameter': widget.order!.diameter,
       });
     } else {
+      // حالة إضافة جديد: نبدأ بسطر فاضي
       _addNewRow();
     }
   }
@@ -44,7 +46,7 @@ class _OrderFormState extends State<OrderForm> {
   void _addNewRow() {
     setState(() {
       _orderRows.add({
-        'salesOrder': TextEditingController(), // أضفنا الكنترولر هنا في كل سطر
+        'salesOrder': TextEditingController(),
         'width': TextEditingController(),
         'grams': TextEditingController(),
         'tons': TextEditingController(),
@@ -68,14 +70,9 @@ class _OrderFormState extends State<OrderForm> {
   }
 
   @override
-  @override
   void dispose() {
-    // التأكد من إغلاق الكنترولر الرئيسي
     _customerController.dispose();
-
-    // التأكد من إغلاق كنترولرات الصفوف بشكل آمن
     for (var row in _orderRows) {
-      // علامة الـ ?. بتضمن إن لو الكنترولر null مش هيضرب error
       row['salesOrder']?.dispose();
       row['width']?.dispose();
       row['grams']?.dispose();
@@ -84,13 +81,14 @@ class _OrderFormState extends State<OrderForm> {
     }
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.order != null;
     return AlertDialog(
       title: Text(isEditing ? 'تعديل الطلب' : 'إضافة أوردرات متعددة'),
       content: SizedBox(
-        width: 1100, // زيادة العرض قليلاً لتناسب الخانة الجديدة
+        width: 1000,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -100,80 +98,29 @@ class _OrderFormState extends State<OrderForm> {
                 decoration: const InputDecoration(
                     labelText: 'اسم العميل',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person)
-                ),
+                    prefixIcon: Icon(Icons.person)),
               ),
               const SizedBox(height: 20),
               const Divider(thickness: 2),
 
-              // عناوين الخانات لتسهيل القراءة
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-                child: Row(
-                  children: const [
-                    Expanded(flex: 2, child: Text("رقم أمر البيع (S.O)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                    SizedBox(width: 5),
-                    Expanded(flex: 2, child: Text("القطر", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                    SizedBox(width: 5),
-                    Expanded(flex: 2, child: Text("العرض (سم)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                    SizedBox(width: 5),
-                    Expanded(flex: 2, child: Text("الجرام", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                    SizedBox(width: 5),
-                    Expanded(flex: 2, child: Text("الوزن (طن)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                    SizedBox(width: 5),
-                    Expanded(flex: 1, child: Text("بكر", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                    SizedBox(width: 40),
-                  ],
-                ),
-              ),
+              // رؤوس الجدول
+              _buildTableHeader(),
 
               ..._orderRows.asMap().entries.map((entry) {
                 int idx = entry.key;
                 var row = entry.value;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Row(
-                    children: [
-                      // خانة Sales Order لكل سطر
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: row['salesOrder'],
-                          decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'S.O #'),
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(
-                        flex: 2,
-                        child: DropdownButtonFormField<double>(
-                          value: row['diameter'],
-                          decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 5)),
-                          items: _diameterSpecs.keys.map((d) => DropdownMenuItem(value: d, child: Text('$d سم'))).toList(),
-                          onChanged: (val) {
-                            setState(() => row['diameter'] = val);
-                            _calculateRow(idx);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Expanded(flex: 2, child: TextField(controller: row['width'], keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
-                      const SizedBox(width: 5),
-                      Expanded(flex: 2, child: TextField(controller: row['grams'], keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder()))),
-                      const SizedBox(width: 5),
-                      Expanded(flex: 2, child: TextField(controller: row['tons'], keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
-                      const SizedBox(width: 5),
-                      Expanded(flex: 1, child: TextField(controller: row['qty'], readOnly: true, textAlign: TextAlign.center, decoration: InputDecoration(fillColor: Colors.grey[200], filled: true, border: const OutlineInputBorder()))),
-                      if (!isEditing)
-                        IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => setState(() => _orderRows.removeAt(idx))),
-                    ],
-                  ),
-                );
+                return _buildOrderRow(idx, row, isEditing);
               }).toList(),
+
               if (!isEditing)
-                ElevatedButton.icon(
-                  onPressed: _addNewRow,
-                  icon: const Icon(Icons.add_box),
-                  label: const Text('إضافة مقاس/أمر بيع جديد'),
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: ElevatedButton.icon(
+                    onPressed: _addNewRow,
+                    icon: const Icon(Icons.add_box),
+                    label: const Text('إضافة مقاس جديد'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade50),
+                  ),
                 ),
             ],
           ),
@@ -182,44 +129,106 @@ class _OrderFormState extends State<OrderForm> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
         ElevatedButton(
-          onPressed: () async {
-            if (_customerController.text.trim().isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('برجاء إدخال اسم العميل')));
-              return;
-            }
-
-            try {
-              for (var row in _orderRows) {
-                final order = Order(
-                  id: isEditing ? widget.order!.id : null,
-                  date: isEditing ? widget.order!.date : DateTime.now(),
-                  customerName: _customerController.text.trim(),
-                  // سحب رقم أمر البيع من السطر نفسه
-                  salesOrder: row['salesOrder'].text.trim(),
-                  width: double.parse(row['width'].text),
-                  quantity: int.parse(row['qty'].text),
-                  grams: double.tryParse(row['grams'].text) ?? 0,
-                  totalTons: double.parse(row['tons'].text),
-                  diameter: row['diameter'],
-                  diameterWeight: _diameterSpecs[row['diameter']]!,
-                  status: isEditing ? widget.order!.status : "انتظار",
-                );
-
-                if (isEditing) {
-                  await DatabaseHelper().updateOrder(order);
-                } else {
-                  await DatabaseHelper().insertOrder(order);
-                }
-              }
-              widget.onSaved();
-              Navigator.pop(context);
-            } catch (e) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red));
-            }
-          },
+          onPressed: () => _handleSave(isEditing),
           child: Text(isEditing ? 'تحديث البيانات' : 'حفظ الكل'),
         ),
       ],
+    );
+  }
+
+  // ميثود الحفظ باستخدام الكيوبيت
+  void _handleSave(bool isEditing) {
+    if (_customerController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('برجاء إدخال اسم العميل')));
+      return;
+    }
+
+    try {
+      List<Order> ordersToSave = [];
+      for (var row in _orderRows) {
+        ordersToSave.add(Order(
+          id: isEditing ? widget.order!.id : null,
+          date: isEditing ? widget.order!.date : DateTime.now(),
+          customerName: _customerController.text.trim(),
+          salesOrder: row['salesOrder'].text.trim(),
+          width: double.parse(row['width'].text),
+          quantity: int.parse(row['qty'].text),
+          grams: double.tryParse(row['grams'].text) ?? 0,
+          totalTons: double.parse(row['tons'].text),
+          diameter: row['diameter'],
+          diameterWeight: _diameterSpecs[row['diameter']]!,
+          status: isEditing ? widget.order!.status : "انتظار",
+        ));
+      }
+
+      // إرسال البيانات للكيوبيت
+      context.read<OrdersCubit>().saveOrders(ordersToSave, isEditing);
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تأكد من إدخال جميع الأرقام بشكل صحيح'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // تفصيل ويدجت رأس الجدول لنظافة الكود
+  Widget _buildTableHeader() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 5, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(flex: 2, child: Text("رقم S.O", style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(width: 5),
+          Expanded(flex: 2, child: Text("القطر", style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(width: 5),
+          Expanded(flex: 2, child: Text("العرض", style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(width: 5),
+          Expanded(flex: 2, child: Text("الجرام", style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(width: 5),
+          Expanded(flex: 2, child: Text("طن", style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(width: 5),
+          Expanded(flex: 1, child: Text("بكر", style: TextStyle(fontWeight: FontWeight.bold))),
+          SizedBox(width: 40),
+        ],
+      ),
+    );
+  }
+
+  // ويدجت السطر الواحد
+  Widget _buildOrderRow(int idx, Map<String, dynamic> row, bool isEditing) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        children: [
+          Expanded(flex: 2, child: TextField(controller: row['salesOrder'], decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '#'))),
+          const SizedBox(width: 5),
+          Expanded(
+            flex: 2,
+            child: DropdownButtonFormField<double>(
+              value: row['diameter'],
+              decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 5)),
+              items: _diameterSpecs.keys.map((d) => DropdownMenuItem(value: d, child: Text('$d سم'))).toList(),
+              onChanged: (val) {
+                setState(() => row['diameter'] = val);
+                _calculateRow(idx);
+              },
+            ),
+          ),
+          const SizedBox(width: 5),
+          Expanded(flex: 2, child: TextField(controller: row['width'], keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
+          const SizedBox(width: 5),
+          Expanded(flex: 2, child: TextField(controller: row['grams'], keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder()))),
+          const SizedBox(width: 5),
+          Expanded(flex: 2, child: TextField(controller: row['tons'], keyboardType: TextInputType.number, decoration: const InputDecoration(border: OutlineInputBorder()), onChanged: (_) => _calculateRow(idx))),
+          const SizedBox(width: 5),
+          Expanded(flex: 1, child: TextField(controller: row['qty'], readOnly: true, textAlign: TextAlign.center, decoration: InputDecoration(fillColor: Colors.grey[200], filled: true, border: const OutlineInputBorder()))),
+          if (!isEditing)
+            IconButton(
+              icon: const Icon(Icons.remove_circle, color: Colors.red),
+              onPressed: () => setState(() => _orderRows.removeAt(idx)),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -12,42 +12,47 @@ class PlanningAlgorithm {
     List<ProductionPlan> finalPlans = [];
 
     for (double targetGram in gramPriority) {
-      // جلب الطلبات اللي في "الانتظار" فقط لهذا الجرام
-      List<Order> gramOrders = orders.where((o) => o.grams == targetGram && o.status == "انتظار").toList();
+      // جلب الطلبات المتاحة (انتظار وبها كمية)
+      List<Order> gramOrders = orders
+          .where((o) => o.grams == targetGram && o.status == "انتظار" && o.quantity > 0)
+          .toList();
+
       if (gramOrders.isEmpty) continue;
 
-      // بناء المخزون المتاح
-      Map<double, int> inventory = {};
+      // تحويل المخزن إلى قائمة من "البكرات المنفردة" مع الحفاظ على الـ ID
+      // كل بكرة هنا بنعتبرها قطعة مستقلة
+      List<RollUnit> availableRolls = [];
       for (var order in gramOrders) {
-        double widthInMeters = order.width / 100;
-        inventory[widthInMeters] = (inventory[widthInMeters] ?? 0) + order.quantity;
+        for (int i = 0; i < order.quantity; i++) {
+          availableRolls.add(RollUnit(
+            orderId: order.id ?? 0,
+            customerName: order.customerName,
+            widthMeters: order.width / 100,
+            widthCm: order.width,
+          ));
+        }
       }
 
-      // محاولة استخراج تجمعات صالحة (4.70 - 5.00)
       while (true) {
-        List<double> availableWidths = inventory.keys.where((w) => inventory[w]! > 0).toList();
+        // البحث عن أفضل توليفة باستخدام بكرات من IDs مختلفة في نفس الطقم
+        CombinationResult bestResult = _findBestCombination(availableRolls);
 
-        // البحث عن أفضل توليفة (بشرط عدم تكرار المقاس)
-        CombinationResult bestResult = findBestCombination(availableWidths, inventory);
-
-        // التعديل: لو ملقيناش تجميعه فوق الـ 4.70 نوقف فوراً
-        if (bestResult.widths.isEmpty || bestResult.total < minMachineWidth) {
-          break;
+        if (bestResult.selectedRolls.isEmpty || bestResult.total < minMachineWidth) {
+          break; // لا توجد رصة تحقق الشرط (4.70 - 5.00)
         }
 
         List<PlanItem> currentItems = [];
-        for (double width in bestResult.widths) {
-          inventory[width] = inventory[width]! - 1; // خصم بكرة واحدة
-
-          double widthInCm = width * 100;
-          var originalOrder = gramOrders.firstWhere((o) => o.width == widthInCm);
-
+        for (var roll in bestResult.selectedRolls) {
+          // إضافة البكرة للطقم
           currentItems.add(PlanItem(
-            orderId: originalOrder.id ?? 0,
-            customerName: originalOrder.customerName,
-            width: widthInCm,
-            quantity: 1, // دائماً بكرة واحدة لكل مقاس في الطقم
+            orderId: roll.orderId,
+            customerName: roll.customerName,
+            width: roll.widthCm,
+            quantity: 1,
           ));
+
+          // حذف هذه البكرة تحديداً من المتاح حتى لا تُستخدم في نفس الطقم أو أطقم تالية
+          availableRolls.remove(roll);
         }
 
         finalPlans.add(
@@ -64,43 +69,61 @@ class PlanningAlgorithm {
     return finalPlans;
   }
 
-  static CombinationResult findBestCombination(
-      List<double> widths,
-      Map<double, int> inventory,
-      ) {
-    CombinationResult best = CombinationResult([], 0, false);
+  static CombinationResult _findBestCombination(List<RollUnit> rolls) {
+    CombinationResult best = CombinationResult([], 0);
 
-    void backtrack(int index, List<double> current, double total) {
+    void backtrack(int index, List<RollUnit> current, double total, Set<int> usedOrderIds) {
       if (total > maxMachineWidth) return;
 
-      // لو وصلنا للنطاق المطلوب، بنحفظ النتيجة لو هي أفضل (أقل هالك)
+      // إذا وصلنا للنطاق المطلوب
       if (total >= minMachineWidth && total <= maxMachineWidth) {
         if (total > best.total) {
-          best = CombinationResult(List.from(current), total, true);
+          best = CombinationResult(List.from(current), total);
         }
-        // لو وصلنا لـ 5.00 بالظبط (الكفاءة القصوى) ممكن نوقف بحث
         if (total == maxMachineWidth) return;
       }
 
-      for (int i = index; i < widths.length; i++) {
-        double w = widths[i];
+      for (int i = index; i < rolls.length; i++) {
+        RollUnit roll = rolls[i];
 
-        // شرطك الأساسي: عدم التكرار (inventory هنا مش محتاجين نخصم منه
-        // لأننا بنمرر i + 1 في الـ recursion لضمان عدم الرجوع لنفس المقاس)
-        current.add(w);
-        backtrack(i + 1, current, total + w); // i + 1 تمنع تكرار المقاس في نفس الطقم
-        current.removeLast();
+        // الشرط الجوهري: لا تأخذ بكرة من نفس الـ Order ID في نفس الرصة
+        if (!usedOrderIds.contains(roll.orderId)) {
+          current.add(roll);
+          usedOrderIds.add(roll.orderId);
+
+          // ننتقل لـ i + 1 لأننا نعتبر القائمة بكرات فردية
+          backtrack(i + 1, current, total + roll.widthMeters, usedOrderIds);
+
+          // إرجاع الحالة (Backtracking)
+          usedOrderIds.remove(roll.orderId);
+          current.removeLast();
+        }
       }
     }
 
-    backtrack(0, [], 0);
+    // نمرر Set لتتبع الـ IDs المستخدمة في الطقم الحالي
+    backtrack(0, [], 0, {});
     return best;
   }
 }
 
+// كلاس مساعد لتمثيل البكرة الواحدة
+class RollUnit {
+  final int orderId;
+  final String customerName;
+  final double widthMeters;
+  final double widthCm;
+
+  RollUnit({
+    required this.orderId,
+    required this.customerName,
+    required this.widthMeters,
+    required this.widthCm,
+  });
+}
+
 class CombinationResult {
-  final List<double> widths;
+  final List<RollUnit> selectedRolls;
   final double total;
-  final bool valid;
-  CombinationResult(this.widths, this.total, this.valid);
+  CombinationResult(this.selectedRolls, this.total);
 }
