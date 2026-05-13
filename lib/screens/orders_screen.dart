@@ -99,16 +99,17 @@ class OrdersScreen extends StatelessWidget {
       DataColumn(label: Text('أمر البيع')),
       DataColumn(label: Text('العميل')),
       DataColumn(label: Text('العرض')),
+      DataColumn(label: Text('القطر')), // العمود الجديد هنا
       DataColumn(label: Text('الجرام')),
-      DataColumn(label: Text('العدد (بكرة)')), // عمود جديد
-      DataColumn(label: Text('متوسط البكرة')), // عمود جديد
+      DataColumn(label: Text('العدد (بكرة)')),
+      DataColumn(label: Text('متوسط البكرة')),
       DataColumn(label: Text('الوزن الكلي')),
       DataColumn(label: Text('الحالة')),
       DataColumn(label: Text('إجراءات')),
     ];
   }
   DataRow _buildDataRow(BuildContext context, dynamic o) {
-    // حساب متوسط وزن البكرة الواحدة (الوزن الكلي بالكجم / عدد البكر)
+    // حساب متوسط وزن البكرة الواحدة
     double weightInKg = o.totalTons * 1000;
     double avgRollWeight = o.quantity > 0 ? (weightInKg / o.quantity) : 0;
 
@@ -117,14 +118,13 @@ class OrdersScreen extends StatelessWidget {
       DataCell(Text(o.salesOrder ?? '-')),
       DataCell(Text(o.customerName)),
       DataCell(Text('${o.width.toInt()} سم')),
+
+      // إضافة خلية القطر هنا
+      DataCell(Text('${o.diameter ?? "-"} سم')),
+
       DataCell(Text('${o.grams.toInt()}g')),
-
-      // عرض عدد البكر
       DataCell(Text('${o.quantity}')),
-
-      // عرض متوسط وزن البكرة
       DataCell(Text('${avgRollWeight.toStringAsFixed(1)} ك')),
-
       DataCell(Text('${weightInKg.toInt()} ك')),
       DataCell(_buildStatusChip(o.status)),
       DataCell(Row(
@@ -140,8 +140,7 @@ class OrdersScreen extends StatelessWidget {
         ],
       )),
     ]);
-  }
-  Widget _buildStatusChip(String status) {
+  }  Widget _buildStatusChip(String status) {
     bool isDone = status == "تم الجدول";
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
