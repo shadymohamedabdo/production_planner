@@ -99,9 +99,11 @@ class OrdersScreen extends StatelessWidget {
       DataColumn(label: Text('أمر البيع')),
       DataColumn(label: Text('العميل')),
       DataColumn(label: Text('العرض')),
-      DataColumn(label: Text('القطر')), // العمود الجديد هنا
+      DataColumn(label: Text('القطر')),
       DataColumn(label: Text('الجرام')),
-      DataColumn(label: Text('العدد (بكرة)')),
+      DataColumn(label: Text('العدد الكلي')),
+      DataColumn(label: Text('المجدول')),     // جديد
+      DataColumn(label: Text('المتبقي')),     // جديد
       DataColumn(label: Text('متوسط البكرة')),
       DataColumn(label: Text('الوزن الكلي')),
       DataColumn(label: Text('الحالة')),
@@ -109,21 +111,37 @@ class OrdersScreen extends StatelessWidget {
     ];
   }
   DataRow _buildDataRow(BuildContext context, dynamic o) {
-    // حساب متوسط وزن البكرة الواحدة
+    // حساب الوزن
     double weightInKg = o.totalTons * 1000;
     double avgRollWeight = o.quantity > 0 ? (weightInKg / o.quantity) : 0;
+    // حساب المتبقي
+    int remaining = o.quantity - (o.plannedQuantity ?? 0);
 
     return DataRow(cells: [
       DataCell(Text(o.date.toString().split(' ')[0])),
       DataCell(Text(o.salesOrder ?? '-')),
       DataCell(Text(o.customerName)),
       DataCell(Text('${o.width.toInt()} سم')),
-
-      // إضافة خلية القطر هنا
-      DataCell(Text('${o.diameter ?? "-"} سم')),
-
+      DataCell(Text('${o.diameter?.toInt() ?? 0} سم')),
       DataCell(Text('${o.grams.toInt()}g')),
-      DataCell(Text('${o.quantity}')),
+      DataCell(Text(o.quantity.toString())),
+      DataCell(Text((o.plannedQuantity ?? 0).toString())),           // المجدول
+      DataCell(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: remaining > 0 ? Colors.orange.shade100 : Colors.green.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            remaining.toString(),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: remaining > 0 ? Colors.orange.shade900 : Colors.green.shade900,
+            ),
+          ),
+        ),
+      ),
       DataCell(Text('${avgRollWeight.toStringAsFixed(1)} ك')),
       DataCell(Text('${weightInKg.toInt()} ك')),
       DataCell(_buildStatusChip(o.status)),
@@ -131,16 +149,15 @@ class OrdersScreen extends StatelessWidget {
         children: [
           IconButton(
               icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-              onPressed: () => _showOrderForm(context, order: o)
-          ),
+              onPressed: () => _showOrderForm(context, order: o)),
           IconButton(
               icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-              onPressed: () => context.read<OrdersCubit>().deleteOrder(o.id!)
-          ),
+              onPressed: () => context.read<OrdersCubit>().deleteOrder(o.id!)),
         ],
       )),
     ]);
-  }  Widget _buildStatusChip(String status) {
+  }
+  Widget _buildStatusChip(String status) {
     bool isDone = status == "تم الجدول";
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
