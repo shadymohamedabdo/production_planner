@@ -85,7 +85,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ],
             );
           }
-
           return const Center(child: Text("جاري تحميل التقارير..."));
         },
       ),

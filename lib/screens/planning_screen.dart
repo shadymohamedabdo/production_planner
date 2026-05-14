@@ -212,7 +212,7 @@ class PlanningScreen extends StatelessWidget {
           Expanded(
             child: DropdownButtonFormField<double>(
               decoration: const InputDecoration(labelText: "اختر الجرام"),
-              value: state.selectedGram == 0 && state.availableGrams.isNotEmpty ? state.availableGrams.first : state.selectedGram,
+              initialValue: state.selectedGram == 0 && state.availableGrams.isNotEmpty ? state.availableGrams.first : state.selectedGram,
               items: state.availableGrams.map((g) => DropdownMenuItem(value: g, child: Text("جرام: ${g.toInt()}"))).toList(),
               onChanged: (val) => context.read<PlanningCubit>().changeSelectedGram(val!),
             ),
@@ -267,11 +267,18 @@ class PlanningScreen extends StatelessWidget {
       children: [
         const Divider(thickness: 2),
         const Padding(padding: EdgeInsets.symmetric(vertical: 8.0), child: Text("المقاسات المتبقية", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 16))),
-        Card(color: Colors.red.shade50, child: Column(children: waiting.map((order) => ListTile(dense: true, title: Text(order.customerName), subtitle: Text("مقاس: ${order.width} | جرام: ${order.grams.toInt()}"), trailing: Text("${order.quantity} بكرة"))).toList())),
+        Card(color: Colors.red.shade50, child: Column(children: waiting.map((order) {
+          final remaining = order.quantity - (order.plannedQuantity ?? 0);
+          return ListTile(
+            dense: true,
+            title: Text(order.customerName),
+            subtitle: Text("مقاس: ${order.width} | جرام: ${order.grams.toInt()}"),
+            trailing: Text("$remaining بكرة"),
+          );
+        }).toList())),
       ],
     );
   }
-
   void _showDeleteConfirmDialog(BuildContext context) {
     showDialog(
       context: context,

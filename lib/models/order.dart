@@ -2,9 +2,10 @@ class Order {
   int? id;
   DateTime date;
   String customerName;
-  String? salesOrder;         // إضافة رقم أمر البيع
+  String? salesOrder;
   double width;
   int quantity;
+  int plannedQuantity; // الحقل الجديد لمتابعة المجدول فعلياً
   double grams;
   String status;
   double totalTons;
@@ -18,6 +19,7 @@ class Order {
     this.salesOrder,
     required this.width,
     required this.quantity,
+    this.plannedQuantity = 0, // القيمة الافتراضية صفر
     required this.grams,
     required this.totalTons,
     this.status = "انتظار",
@@ -32,6 +34,7 @@ class Order {
     'salesOrder': salesOrder,
     'width': width,
     'quantity': quantity,
+    'plannedQuantity': plannedQuantity, // إضافة الحقل للماب
     'grams': grams,
     'totalTons': totalTons,
     'status': status,
@@ -46,10 +49,33 @@ class Order {
     salesOrder: map['salesOrder'],
     width: (map['width'] as num).toDouble(),
     quantity: map['quantity'],
+    plannedQuantity: map['plannedQuantity'] ?? 0, // قراءة الحقل من الداتابيز
     grams: (map['grams'] as num).toDouble(),
     totalTons: (map['totalTons'] as num).toDouble(),
     status: map['status'] ?? 'انتظار',
     diameter: (map['diameter'] as num?)?.toDouble() ?? 0.0,
     diameterWeight: (map['diameterWeight'] as num?)?.toDouble() ?? 0.0,
   );
+
+  // دالة مساعدة لو حابب تاخد نسخة معدلة من الطلب
+  Order copyWith({
+    int? id,
+    int? plannedQuantity,
+    String? status,
+  }) {
+    return Order(
+      id: id ?? this.id,
+      date: date,
+      customerName: customerName,
+      salesOrder: salesOrder,
+      width: width,
+      quantity: quantity,
+      plannedQuantity: plannedQuantity ?? this.plannedQuantity,
+      grams: grams,
+      totalTons: totalTons,
+      status: status ?? this.status,
+      diameter: diameter,
+      diameterWeight: diameterWeight,
+    );
+  }
 }

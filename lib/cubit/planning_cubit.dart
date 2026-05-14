@@ -7,17 +7,15 @@ import 'planning_state.dart';
 
 class PlanningCubit extends Cubit<PlanningState> {
   final DatabaseHelper db = DatabaseHelper();
-  List<ProductionPlan> _latestPlans = [];
 
   PlanningCubit() : super(PlanningInitial()) {
-    loadData(); // تحميل أولي
+    loadData();
   }
 
   Future<void> loadData() async {
     emit(PlanningLoading());
     try {
       final plans = await db.getSavedPlans();
-      _latestPlans = plans;
       final allOrders = await db.getAllOrders();
       _processData(plans, allOrders);
     } catch (e) {
@@ -26,7 +24,13 @@ class PlanningCubit extends Cubit<PlanningState> {
   }
 
   void _processData(List<ProductionPlan> plans, List<Order> allOrders, {double? selectedGram}) {
-    final waiting = allOrders.where((o) => o.status == 'انتظار' && o.quantity > 0).toList();
+    // التعديل: الطلب يظل في قائمة "الانتظار" طالما أن المجدول أقل من الكلي
+    final waiting = allOrders.where((o) {
+      int planned = o.plannedQuantity ?? 0;
+      int total = o.quantity;
+      return o.status == 'انتظار' && planned < total;
+    }).toList();
+
     final grams = waiting.map((o) => o.grams).toSet().toList()..sort();
     double priorityGram = selectedGram ?? (grams.isNotEmpty ? grams.first : 0.0);
 
@@ -57,6 +61,7 @@ class PlanningCubit extends Cubit<PlanningState> {
         ...current.availableGrams.where((g) => g != current.selectedGram)
       ];
 
+      // توليد الخطة بناءً على المتبقي الفعلي
       final newPlans = PlanningAlgorithm.generatePlans(current.waitingOrders, priority);
 
       if (newPlans.isEmpty) {
@@ -65,20 +70,21 @@ class PlanningCubit extends Cubit<PlanningState> {
         return;
       }
 
-      // حفظ واستهلاك
+      // حفظ واستهلاك الكميات المحددة في كل أوردر
       for (var plan in newPlans) {
         for (var item in plan.items) {
-          if (item.orderId != 0) await db.consumeOrder(item.orderId);
+          if (item.orderId != 0) {
+            // نحدث الكمية المجدولة بمقدار ما تم استهلاكه في هذه النقلة
+            await db.consumeOrder(item.orderId, item.quantity);
+          }
         }
       }
+
       await db.saveProductionPlans(newPlans);
 
-      // --- التعديل الجوهري هنا ---
-      // بدل ما نعتمد على newPlans بس، هنجيب "كل" اللي في الداتا بيز (القديم + الجديد)
       final allPlansFromDb = await db.getSavedPlans();
       final updatedOrders = await db.getAllOrders();
 
-      // نحدث الشاشة بكل البيانات
       _processData(allPlansFromDb, updatedOrders, selectedGram: current.selectedGram);
 
     } catch (e) {
@@ -86,8 +92,9 @@ class PlanningCubit extends Cubit<PlanningState> {
       emit(const PlanningError("حدث خطأ أثناء التوليد"));
     }
   }
+
   Future<void> clearHistory() async {
-    await db.clearAllPlans(); // بيمسح من الداتابيز
-    await loadData(); // بيعيد تحميل الحالة عشان الشاشة تبقى فاضية
+    await db.clearAllPlans();
+    await loadData();
   }
 }

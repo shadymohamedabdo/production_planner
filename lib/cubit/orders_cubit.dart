@@ -46,6 +46,7 @@ class OrdersCubit extends Cubit<OrdersState> {
     }
   }
 
+
   // مسح الكل
   Future<void> clearAll() async {
     try {
