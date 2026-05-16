@@ -1,3 +1,4 @@
+// screens/planning_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/planning_cubit.dart';
@@ -12,7 +13,7 @@ class PlanningScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      // شيلنا لون الخلفية الرمادي القديم عشان الصورة تظهر
       appBar: AppBar(
         title: const Text('جداول تشغيل الماكينة'),
         elevation: 1,
@@ -29,24 +30,42 @@ class PlanningScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocConsumer<PlanningCubit, PlanningState>(
-        buildWhen: (previous, current) => current is PlanningLoading || current is PlanningLoaded,
-        listener: (context, state) {
-          if (state is PlanningError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message), backgroundColor: Colors.red),
+      // 1️⃣ هنا تم إضافة الـ Container كـ خلفية أساسية لشاشة التخطيط
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('images/1.webp'),
+            fit: BoxFit.cover,
+            opacity: 0.82,
+          ),
+        ),
+        child: BlocConsumer<PlanningCubit, PlanningState>(
+          buildWhen: (previous, current) => current is PlanningLoading || current is PlanningLoaded,
+          listener: (context, state) {
+            if (state is PlanningError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(state.message), backgroundColor: Colors.red),
+              );
+            }
+          },
+          builder: (context, state) {
+            if (state is PlanningLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (state is PlanningLoaded) {
+              return _buildContent(context, state);
+            }
+            return const Center(
+              child: Card(
+                color: Colors.white70,
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text("برجاء تهيئة البيانات", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
             );
-          }
-        },
-        builder: (context, state) {
-          if (state is PlanningLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (state is PlanningLoaded) {
-            return _buildContent(context, state);
-          }
-          return const Center(child: Text("برجاء تهيئة البيانات"));
-        },
+          },
+        ),
       ),
     );
   }
@@ -61,9 +80,21 @@ class PlanningScreen extends StatelessWidget {
           child: CustomScrollView(
             slivers: [
               if (state.plans.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
-                  child: Center(child: Text("لا توجد جداول متاحة. اضغط 'توليد الجداول'.")),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        "لا توجد جداول متاحة. اضغط 'توليد الجداول'.",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ),
                 )
               else
                 SliverPadding(
@@ -102,10 +133,10 @@ class PlanningScreen extends StatelessWidget {
       key: key,
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white.withOpacity(0.93), // 2️⃣ جعل كارت الطقم شبه شفاف عشان يظهر التناسق مع الخلفية
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10)],
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -136,7 +167,7 @@ class PlanningScreen extends StatelessWidget {
           ),
           subtitle: Text(
             "من نقلة رقم ${indices.first + 1} إلى ${indices.last + 1}",
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+            style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
           ),
           children: [
             _buildTableHeader(),
@@ -146,14 +177,14 @@ class PlanningScreen extends StatelessWidget {
               final sizes = plan.items.map((e) => e.width.toInt().toString()).join(" + ");
               return Container(
                 decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: Colors.grey.shade100)),
-                  color: idx % 2 == 0 ? Colors.white : Colors.grey.shade50,
+                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                  color: idx % 2 == 0 ? Colors.white.withOpacity(0.7) : Colors.grey.shade50.withOpacity(0.7),
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                 child: Row(
                   children: [
                     Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center)),
-                    Expanded(flex: 3, child: Text(customers, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))),
+                    Expanded(flex: 3, child: Text(customers, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
                     Expanded(flex: 4, child: Text(sizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo))),
                     Expanded(flex: 2, child: Text(plan.totalWidth.toStringAsFixed(2), textAlign: TextAlign.center)),
                     Expanded(flex: 1, child: Text(plan.waste.toStringAsFixed(2), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
@@ -194,17 +225,15 @@ class PlanningScreen extends StatelessWidget {
   Widget _buildHeaderControl(BuildContext context, PlanningLoaded state) {
     return Container(
       padding: const EdgeInsets.all(12),
-      color: Colors.white,
+      color: Colors.white.withOpacity(0.9), // 3️⃣ جعل الهيدر شفاف قليلاً ليعطي عمق للتصميم
       child: Row(
         children: [
           Expanded(
             child: DropdownButtonFormField<double>(
-              decoration: const InputDecoration(labelText: "اختر الجرام"),
-              // 🔴 التعديل السحري والآمن هنا:
+              decoration: const InputDecoration(labelText: "اختر الجرام", filled: true, fillColor: Colors.transparent),
               value: state.availableGrams.contains(state.selectedGram) && state.selectedGram != 0
                   ? state.selectedGram
                   : (state.availableGrams.isNotEmpty ? state.availableGrams.first : null),
-
               items: state.availableGrams.map((g) => DropdownMenuItem(
                 value: g,
                 child: Text("جرام: ${g.toInt()}"),
@@ -215,7 +244,8 @@ class PlanningScreen extends StatelessWidget {
                 }
               },
             ),
-          ),          const SizedBox(width: 15),
+          ),
+          const SizedBox(width: 15),
           ElevatedButton.icon(
             onPressed: state.isGenerating ? null : () => context.read<PlanningCubit>().startGeneration(),
             icon: state.isGenerating ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.bolt),
@@ -243,11 +273,12 @@ class PlanningScreen extends StatelessWidget {
 
   Widget _statCard(String title, String value, Color color) => Expanded(
     child: Card(
+      color: Colors.white.withOpacity(0.9), // 4️⃣ كروت الإحصائيات أصبحت متناسقة مع الخلفية
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            Text(title, style: const TextStyle(fontSize: 10)),
+            Text(title, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
             Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 16)),
           ],
         ),
@@ -257,7 +288,7 @@ class PlanningScreen extends StatelessWidget {
 
   Widget _buildTableHeader() {
     return Container(
-      color: Colors.blueGrey.shade50,
+      color: Colors.blueGrey.shade50.withOpacity(0.9),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: const Row(
         children: [
@@ -275,21 +306,25 @@ class PlanningScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Divider(thickness: 2),
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8.0),
-          child: Text("المقاسات المتبقية", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 16)),
+        const Divider(thickness: 2, color: Colors.white54),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
+            child: const Text("المقاسات المتبقية", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+          ),
         ),
         Card(
-          color: Colors.red.shade50,
+          color: Colors.red.shade50.withOpacity(0.92), // 5️⃣ كارت الانتظار ملون خفيف ومقروء جداً
           child: Column(
             children: waiting.map((order) {
               final remaining = order.quantity - (order.plannedQuantity ?? 0);
               return ListTile(
                 dense: true,
-                title: Text(order.customerName),
-                subtitle: Text("مقاس: ${order.width.toInt()} سم | جرام: ${order.grams.toInt()}"),
-                trailing: Text("$remaining بكرة", style: const TextStyle(fontWeight: FontWeight.bold)),
+                title: Text(order.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text("مقاس: ${order.width.toInt()} سم | جرام: ${order.grams.toInt()}", style: TextStyle(color: Colors.grey.shade800)),
+                trailing: Text("$remaining بكرة", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
               );
             }).toList(),
           ),
@@ -311,6 +346,7 @@ class PlanningScreen extends StatelessWidget {
               context.read<PlanningCubit>().clearHistory();
               Navigator.pop(ctx);
             },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             child: const Text("مسح"),
           ),
         ],
