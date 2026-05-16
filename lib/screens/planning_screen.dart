@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/planning_cubit.dart';
 import '../cubit/planning_state.dart';
+
 import '../models/plan.dart';
 import '../models/order.dart';
 
@@ -16,7 +17,6 @@ class PlanningScreen extends StatelessWidget {
         title: const Text('جداول تشغيل الماكينة'),
         elevation: 1,
         actions: [
-          // زرار مسح السجل (إضافة اختيارية لو تحب)
           IconButton(
             icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
             onPressed: () => _showDeleteConfirmDialog(context),
@@ -25,7 +25,7 @@ class PlanningScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => context.read<PlanningCubit>().loadData(),
-            tooltip: 'تحديث البيانات من الداتابيز',
+            tooltip: 'تحديث البيانات',
           ),
         ],
       ),
@@ -53,7 +53,6 @@ class PlanningScreen extends StatelessWidget {
 
   Widget _buildContent(BuildContext context, PlanningLoaded state) {
     final groupedIndices = _groupPlans(state.plans);
-
     return Column(
       children: [
         _buildHeaderControl(context, state),
@@ -71,15 +70,12 @@ class PlanningScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(12),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
-                          (context, gIndex) {
-                        // التعديل الأول: هنا بنمرر الـ context للدالة
-                        return _buildBatchTable(
-                          context,
-                          state.plans,
-                          groupedIndices[gIndex],
-                          key: PageStorageKey('group_${groupedIndices[gIndex].first}'),
-                        );
-                      },
+                          (context, gIndex) => _buildBatchTable(
+                        context,
+                        state.plans,
+                        groupedIndices[gIndex],
+                        key: PageStorageKey('group_${groupedIndices[gIndex].first}'),
+                      ),
                       childCount: groupedIndices.length,
                     ),
                   ),
@@ -98,7 +94,6 @@ class PlanningScreen extends StatelessWidget {
     );
   }
 
-  // التعديل الثاني: إضافة BuildContext context لتعريف الدالة
   Widget _buildBatchTable(BuildContext context, List<ProductionPlan> allPlans, List<int> indices, {Key? key}) {
     final firstPlan = allPlans[indices.first];
     final headerSizes = firstPlan.items.map((e) => e.width.toInt().toString()).join(" + ");
@@ -115,23 +110,17 @@ class PlanningScreen extends StatelessWidget {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          initiallyExpanded: false, // مقفول افتراضياً
+          initiallyExpanded: false,
           controlAffinity: ListTileControlAffinity.trailing,
           title: Row(
-            textDirection: TextDirection.rtl, // لضبط ترتيب (الرقم قبل الكلمة)
+            textDirection: TextDirection.rtl,
             children: [
-              Text(
-                "${indices.length} ",
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 18),
-              ),
+              Text("${indices.length} ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 18)),
               const Text("طقم", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
               const SizedBox(width: 12),
               const Text("|", style: TextStyle(color: Colors.grey)),
               const SizedBox(width: 12),
-              Text(
-                "${firstPlan.grams.toInt()} ",
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey),
-              ),
+              Text("${firstPlan.grams.toInt()} ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
               const Text("جرام", style: TextStyle(fontSize: 14)),
               const SizedBox(width: 12),
               const Text("|", style: TextStyle(color: Colors.grey)),
@@ -179,7 +168,6 @@ class PlanningScreen extends StatelessWidget {
     );
   }
 
-  // باقي الدوال المساعدة (تجميع، إحصائيات، هيدر...)
   List<List<int>> _groupPlans(List<ProductionPlan> plans) {
     if (plans.isEmpty) return [];
     List<List<int>> groups = [];
@@ -199,7 +187,7 @@ class PlanningScreen extends StatelessWidget {
   }
 
   bool _compareLists(List<double> a, List<double> b) {
-    for (int i = 0; i < a.length; i++) { if ((a[i] - b[i]).abs() > 0.001) return false; }
+    for (int i = 0; i < a.length; i++) if ((a[i] - b[i]).abs() > 0.001) return false;
     return true;
   }
 
@@ -212,7 +200,7 @@ class PlanningScreen extends StatelessWidget {
           Expanded(
             child: DropdownButtonFormField<double>(
               decoration: const InputDecoration(labelText: "اختر الجرام"),
-              initialValue: state.selectedGram == 0 && state.availableGrams.isNotEmpty ? state.availableGrams.first : state.selectedGram,
+              value: state.selectedGram == 0 && state.availableGrams.isNotEmpty ? state.availableGrams.first : state.selectedGram,
               items: state.availableGrams.map((g) => DropdownMenuItem(value: g, child: Text("جرام: ${g.toInt()}"))).toList(),
               onChanged: (val) => context.read<PlanningCubit>().changeSelectedGram(val!),
             ),
@@ -243,7 +231,19 @@ class PlanningScreen extends StatelessWidget {
     );
   }
 
-  Widget _statCard(String t, String v, Color c) => Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [Text(t, style: const TextStyle(fontSize: 10)), Text(v, style: TextStyle(fontWeight: FontWeight.bold, color: c, fontSize: 16))]))));
+  Widget _statCard(String title, String value, Color color) => Expanded(
+    child: Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Text(title, style: const TextStyle(fontSize: 10)),
+            Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 16)),
+          ],
+        ),
+      ),
+    ),
+  );
 
   Widget _buildTableHeader() {
     return Container(
@@ -266,28 +266,43 @@ class PlanningScreen extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(thickness: 2),
-        const Padding(padding: EdgeInsets.symmetric(vertical: 8.0), child: Text("المقاسات المتبقية", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 16))),
-        Card(color: Colors.red.shade50, child: Column(children: waiting.map((order) {
-          final remaining = order.quantity - (order.plannedQuantity ?? 0);
-          return ListTile(
-            dense: true,
-            title: Text(order.customerName),
-            subtitle: Text("مقاس: ${order.width} | جرام: ${order.grams.toInt()}"),
-            trailing: Text("$remaining بكرة"),
-          );
-        }).toList())),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8.0),
+          child: Text("المقاسات المتبقية", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 16)),
+        ),
+        Card(
+          color: Colors.red.shade50,
+          child: Column(
+            children: waiting.map((order) {
+              final remaining = order.quantity - (order.plannedQuantity ?? 0);
+              return ListTile(
+                dense: true,
+                title: Text(order.customerName),
+                subtitle: Text("مقاس: ${order.width.toInt()} سم | جرام: ${order.grams.toInt()}"),
+                trailing: Text("$remaining بكرة", style: const TextStyle(fontWeight: FontWeight.bold)),
+              );
+            }).toList(),
+          ),
+        ),
       ],
     );
   }
+
   void _showDeleteConfirmDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("مسح السجل"),
-        content: const Text("هل أنت متأكد؟"),
+        content: const Text("هل أنت متأكد؟ سيتم مسح جميع الخطط المحفوظة."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("إلغاء")),
-          ElevatedButton(onPressed: () { context.read<PlanningCubit>().clearHistory(); Navigator.pop(ctx); }, child: const Text("مسح")),
+          ElevatedButton(
+            onPressed: () {
+              context.read<PlanningCubit>().clearHistory();
+              Navigator.pop(ctx);
+            },
+            child: const Text("مسح"),
+          ),
         ],
       ),
     );

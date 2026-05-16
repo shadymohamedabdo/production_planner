@@ -7,6 +7,7 @@ import 'orders_state.dart';
 class OrdersCubit extends Cubit<OrdersState> {
   final DatabaseHelper db = DatabaseHelper();
 
+
   OrdersCubit() : super(OrdersInitial());
 
   // جلب كل الطلبات
@@ -14,7 +15,7 @@ class OrdersCubit extends Cubit<OrdersState> {
     emit(OrdersLoading());
     try {
       final orders = await db.getAllOrders();
-      emit(OrdersLoaded(orders));
+      emit(OrdersLoaded(List.from(orders)));
     } catch (e) {
       emit(const OrdersError("فشل في تحميل البيانات"));
     }
@@ -25,17 +26,20 @@ class OrdersCubit extends Cubit<OrdersState> {
     try {
       for (var order in orders) {
         if (isEditing) {
-          await db.updateOrder(order);
+          // ✅ استخدم الدالة اللي بتصفر الجدولة
+          await db.updateOrderAndResetPlanning(order);
         } else {
           await db.insertOrder(order);
         }
       }
-      fetchOrders(); // تحديث القائمة تلقائياً
+      // أهم خطوة: بعد التعديل، امسح سجل الإنتاج القديم عشان ميحصلش تضارب
+      await db.clearAllPlans();
+
+      fetchOrders();
     } catch (e) {
-      emit(const OrdersError("حدث خطأ أثناء الحفظ"));
+      emit(const OrdersError("حدث خطأ أثناء التعديل"));
     }
   }
-
   // حذف طلب واحد
   Future<void> deleteOrder(int id) async {
     try {

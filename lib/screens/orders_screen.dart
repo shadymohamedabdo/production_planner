@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/orders_cubit.dart';
 import '../cubit/orders_state.dart';
+import '../cubit/planning_cubit.dart';
+import '../database/database_helper.dart';
 import '../widgets/order_form.dart';
 
 class OrdersScreen extends StatelessWidget {
@@ -147,15 +149,51 @@ class OrdersScreen extends StatelessWidget {
       DataCell(_buildStatusChip(o.status)),
       DataCell(Row(
         children: [
+          // 1️⃣ زرار التعديل الذكي
           IconButton(
               icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-              onPressed: () => _showOrderForm(context, order: o)),
+              onPressed: () async {
+                // بنستنى لحد ما يفتح شاشة التعديل ويخلص حفظ ويقفلها
+                _showOrderForm(context, order: o);
+
+                // أول ما يرجع من التعديل، بنصفر السجل القديم فوراً عشان المقاسات الجديدة متبوظش الحسبة
+                await DatabaseHelper().clearAllPlans();
+                await DatabaseHelper().resetAllOrdersPlanning();
+
+                // نحدث بيانات الشاشات فوراً
+                if (context.mounted) {
+                  context.read<OrdersCubit>().fetchOrders();
+                  try { context.read<PlanningCubit>().loadData(); } catch (_) {}
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم تعديل الطلب وتحديث سجل الإنتاج')),
+                  );
+                }
+              }),
+
+          // 2️⃣ زرار الحذف الذكي
           IconButton(
               icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-              onPressed: () => context.read<OrdersCubit>().deleteOrder(o.id!)),
+              onPressed: () async {
+                // قبل ما نحذف، بننظف جداول الإنتاج والتخطيط المرتبطة بيه
+                await DatabaseHelper().clearAllPlans();
+                await DatabaseHelper().resetAllOrdersPlanning();
+
+                // نحذف الطلب نفسه من الداتا بيز
+                if (context.mounted) {
+                  await context.read<OrdersCubit>().deleteOrder(o.id!);
+
+                  // نحدث الشاشات عشان الأرقام ترجع صفر والمحذوف يختفي
+                  context.read<OrdersCubit>().fetchOrders();
+                  try { context.read<PlanningCubit>().loadData(); } catch (_) {}
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم حذف الطلب وتصفير سجل الإنتاج بالكامل')),
+                  );
+                }
+              }),
         ],
-      )),
-    ]);
+      )),    ]);
   }
   Widget _buildStatusChip(String status) {
     bool isDone = status == "تم الجدول";

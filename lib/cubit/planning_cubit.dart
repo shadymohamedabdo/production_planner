@@ -94,7 +94,25 @@ class PlanningCubit extends Cubit<PlanningState> {
   }
 
   Future<void> clearHistory() async {
-    await db.clearAllPlans();
-    await loadData();
+    try {
+      // 1. مسح جداول الإنتاج أولاً
+      await db.clearAllPlans();
+      await db.resetAllOrdersPlanning();
+
+      // 2. نجيب كل الأوردرات اللي في الداتا بيز حالياً
+      final allOrders = await db.getAllOrders();
+
+      // 3. نلف عليهم واحد واحد ونستخدم الدالة بتاعتك عشان نصفرهم
+      for (var order in allOrders) {
+        await db.updateOrderAndResetPlanning(order);
+      }
+
+      // 4. تحديث البيانات في الشاشة
+      await loadData();
+
+      print("تم تصفير كل الطلبات بنجاح");
+    } catch (e) {
+      emit(PlanningError("فشل مسح السجل: $e"));
+    }
   }
 }

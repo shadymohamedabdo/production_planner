@@ -185,6 +185,30 @@ class DatabaseHelper {
   Future<List<ProductionPlan>> getAllProductionPlans() async {
     return await getSavedPlans();
   }
+// أضف هذه الدالة أو حدث دالة التعديل عندك
+  Future<int> updateOrderAndResetPlanning(Order order) async {
+    final dbClient = await database;
+    return await dbClient.update(
+      'orders',
+      {
+        // نحدث كل البيانات بس نجبر المجدول يكون 0 مهما كان اللي في الموديل
+        'width': order.width,
+        'grams': order.grams,
+        'quantity': order.quantity,
+        'plannedQuantity': 0, // ✅ تأكيد قاطع
+        'status': 'انتظار',   // ✅ تأكيد قاطع
+      },
+      where: 'id = ?',
+      whereArgs: [order.id],
+    );
+  }
+  Future<void> resetAllOrdersPlanning() async {
+    final dbClient = await database;
+    await dbClient.update(
+      'orders',
+      {'plannedQuantity': 0, 'status': 'انتظار'},
+    );
+  }
   Future<int> clearAllOrders() async {
     final db = await database;
     return await db.delete('orders');

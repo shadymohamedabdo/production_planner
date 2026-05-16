@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/orders_cubit.dart';
+import '../cubit/planning_cubit.dart';
 import 'orders_screen.dart';
 import 'planning_screen.dart';
 import 'reports_screen.dart';
@@ -68,19 +69,31 @@ class MainDrawer extends StatelessWidget {
 
         if (destination != null) {
           Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => destination)
+            context,
+            MaterialPageRoute(
+              builder: (_) => destination is PlanningScreen
+                  ? BlocProvider(
+                create: (context) => PlanningCubit()..loadData(),
+                child: destination,
+              )
+                  : destination,
+            ),
           ).then((_) {
-            // استخدام الـ parentContext لضمان الوصول للـ Cubit
+            // ✅ السحر هنا: لما ترجع من أي صفحة، بنحدث بيانات الشاشتين فوراً
             try {
+              // 1. تحديث صفحة الطلبات (عشان لو الانتاج صفر البكر يظهر هنا)
               parentContext.read<OrdersCubit>().fetchOrders();
-              debugPrint("تم تحديث سجل الطلبات بنجاح");
+
+              // 2. تحديث صفحة التخطيط (عشان لو عدلنا أوردر يظهر في المتبقي)
+              // ملاحظة: لو كنت مستخدم BlocProvider في الـ main.dart للـ PlanningCubit
+              // parentContext.read<PlanningCubit>().loadData();
+
+              debugPrint("تمت المزامنة بين الصفحات بنجاح");
             } catch (e) {
-              debugPrint("OrdersCubit error: $e");
+              debugPrint("Sync Error: $e");
             }
           });
         }
       },
     );
-  }
-}
+  }}
