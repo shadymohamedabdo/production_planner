@@ -200,12 +200,22 @@ class PlanningScreen extends StatelessWidget {
           Expanded(
             child: DropdownButtonFormField<double>(
               decoration: const InputDecoration(labelText: "اختر الجرام"),
-              value: state.selectedGram == 0 && state.availableGrams.isNotEmpty ? state.availableGrams.first : state.selectedGram,
-              items: state.availableGrams.map((g) => DropdownMenuItem(value: g, child: Text("جرام: ${g.toInt()}"))).toList(),
-              onChanged: (val) => context.read<PlanningCubit>().changeSelectedGram(val!),
+              // 🔴 التعديل السحري والآمن هنا:
+              value: state.availableGrams.contains(state.selectedGram) && state.selectedGram != 0
+                  ? state.selectedGram
+                  : (state.availableGrams.isNotEmpty ? state.availableGrams.first : null),
+
+              items: state.availableGrams.map((g) => DropdownMenuItem(
+                value: g,
+                child: Text("جرام: ${g.toInt()}"),
+              )).toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  context.read<PlanningCubit>().changeSelectedGram(val);
+                }
+              },
             ),
-          ),
-          const SizedBox(width: 15),
+          ),          const SizedBox(width: 15),
           ElevatedButton.icon(
             onPressed: state.isGenerating ? null : () => context.read<PlanningCubit>().startGeneration(),
             icon: state.isGenerating ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.bolt),

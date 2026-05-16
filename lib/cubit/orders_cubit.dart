@@ -22,25 +22,28 @@ class OrdersCubit extends Cubit<OrdersState> {
   }
 
   // إضافة طلبات (يدعم إضافة قائمة كاملة)
+// إضافة طلبات أو تعديلها (تعديل آمن)
   Future<void> saveOrders(List<Order> orders, bool isEditing) async {
     try {
       for (var order in orders) {
         if (isEditing) {
-          // ✅ استخدم الدالة اللي بتصفر الجدولة
+          // ✅ استخدم الدالة اللي بتصفر الجدولة للطلب المبرمج
           await db.updateOrderAndResetPlanning(order);
+
+          // 🟢 نقلنا السطر هنا جوه الـ if عشان يمسح التخطيط في التعديل فقط
+          await db.clearAllPlans();
         } else {
+          // في حالة الإضافة الجديدة، بنضيف بس من غير ما نمسح سجل الإنتاج والتخطيط القديم
           await db.insertOrder(order);
         }
       }
-      // أهم خطوة: بعد التعديل، امسح سجل الإنتاج القديم عشان ميحصلش تضارب
-      await db.clearAllPlans();
 
+      // نحدث البيانات في الشاشة فوراً
       fetchOrders();
     } catch (e) {
-      emit(const OrdersError("حدث خطأ أثناء التعديل"));
+      emit(const OrdersError("حدث خطأ أثناء حفظ البيانات"));
     }
-  }
-  // حذف طلب واحد
+  }  // حذف طلب واحد
   Future<void> deleteOrder(int id) async {
     try {
       await db.deleteOrder(id);
