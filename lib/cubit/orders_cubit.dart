@@ -1,4 +1,3 @@
-// logic/orders_cubit/orders_cubit.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../database/database_helper.dart';
 import '../../models/order.dart';
@@ -9,54 +8,46 @@ class OrdersCubit extends Cubit<OrdersState> {
 
   OrdersCubit() : super(OrdersInitial());
 
-  // جلب كل الطلبات
   Future<void> fetchOrders() async {
     emit(OrdersLoading());
     try {
       final orders = await db.getAllOrders();
-      emit(OrdersLoaded(List.from(orders)));
+      emit(OrdersLoaded(orders));
     } catch (e) {
       emit(const OrdersError("فشل في تحميل البيانات"));
     }
   }
 
-  // إضافة أو تعديل الطلبات (تحسين الأداء ونقل منطق التنظيف هنا)
   Future<void> saveOrders(List<Order> orders, bool isEditing) async {
     try {
       for (var order in orders) {
-        if (isEditing) {
-          await db.updateOrderAndResetPlanning(order);
+        if (isEditing && order.id != null) {
+          await db.clearPlansForOrder(order.id!);
+          await db.resetPlanningForOrder(order.id!);
+          await db.updateOrder(order);
         } else {
           await db.insertOrder(order);
         }
       }
-
-      // 🟢 تحسين الأداء: مسح وتصفير الخطط مرة واحدة فقط بعد انتهاء اللووب بالكامل
-      if (isEditing) {
-        await db.clearAllPlans();
-        await db.resetAllOrdersPlanning();
-      }
-
-      fetchOrders(); // تحديث الشاشة
+      await fetchOrders();
     } catch (e) {
       emit(const OrdersError("حدث خطأ أثناء حفظ البيانات"));
     }
   }
 
-  // 🟢 دالة الحذف الذكية: بتنظف الجداول وتحذف الطلب في خطوة واحدة من الخلفية
   Future<void> deleteOrderWithReset(int id) async {
     try {
-      await db.clearAllPlans();
-      await db.resetAllOrdersPlanning();
+      await db.clearPlansForOrder(id);
+      await db.resetPlanningForOrder(id);
       await db.deleteOrder(id);
 
-      fetchOrders(); // تحديث الشاشة فوراً بعد الحذف
+      // تحديث البيانات بعد الحذف
+      await fetchOrders();
     } catch (e) {
-      emit(const OrdersError("فشل الحذف وسجل الإنتاج ممتلئ"));
+      print('Delete Error: $e'); // للتصحيح
+      rethrow; // مهم: عشان نعرف الخطأ الحقيقي
     }
   }
-
-  // مسح الكل
   Future<void> clearAll() async {
     try {
       await db.clearAllOrders();
@@ -64,7 +55,7 @@ class OrdersCubit extends Cubit<OrdersState> {
       await db.resetAllOrdersPlanning();
       emit(const OrdersLoaded([]));
     } catch (e) {
-      emit(const OrdersError("فشل مسح البيانات"));
+      emit(const OrdersError("فشل مسح جميع البيانات"));
     }
   }
 }

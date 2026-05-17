@@ -217,9 +217,52 @@ class DatabaseHelper {
       {'plannedQuantity': 0, 'status': 'انتظار'},
     );
   }
+
   Future<int> clearAllOrders() async {
     final db = await database;
     return await db.delete('orders');
+  }
+  // database_helper.dart
+
+  /// حذف الخطط الخاصة بطلب معين فقط
+  /// حذف عناصر الخطة الخاصة بطلب معين فقط (من plan_items)
+  /// حذف عناصر الخطة الخاصة بطلب معين، وحذف الخطة الأم إذا أصبحت بلا عناصر
+  Future<void> clearPlansForOrder(int orderId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // 1. جلب معرفات الخطط التي تحتوي على هذا orderId
+      final planIdsResult = await txn.rawQuery(
+        'SELECT DISTINCT planId FROM plan_items WHERE orderId = ?',
+        [orderId],
+      );
+      final List<int> affectedPlanIds = planIdsResult.map((row) => row['planId'] as int).toList();
+
+      // 2. حذف جميع العناصر المرتبطة بهذا orderId
+      await txn.delete('plan_items', where: 'orderId = ?', whereArgs: [orderId]);
+
+      // 3. لكل خطة تأثرت، تحقق مما إذا كان لا يزال لديها عناصر
+      for (int planId in affectedPlanIds) {
+        final countResult = await txn.rawQuery(
+          'SELECT COUNT(*) as count FROM plan_items WHERE planId = ?',
+          [planId],
+        );
+        final int itemCount = countResult.first['count'] as int;
+        if (itemCount == 0) {
+          // لا توجد عناصر متبقية → حذف الخطة الأم
+          await txn.delete('production_plans', where: 'id = ?', whereArgs: [planId]);
+        }
+      }
+    });
+  }  /// إعادة تعيين plannedQuantity لطلب معين فقط
+  Future<void> resetPlanningForOrder(int orderId) async {
+    final db = await database;
+
+    await db.update(
+      'orders',
+      {'plannedQuantity': 0},
+      where: 'id = ?',
+      whereArgs: [orderId],
+    );
   }
   Future<void> clearAllPlans() async {
     final dbClient = await database;

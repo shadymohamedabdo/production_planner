@@ -1,13 +1,21 @@
-// screens/orders_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/orders_cubit.dart';
 import '../cubit/orders_state.dart';
 import '../cubit/planning_cubit.dart';
+import '../models/order.dart';
 import '../widgets/order_form.dart';
 
-class OrdersScreen extends StatelessWidget {
+class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
+
+  @override
+  State<OrdersScreen> createState() => _OrdersScreenState();
+}
+
+class _OrdersScreenState extends State<OrdersScreen> {
+  String _searchQuery = '';
+  String _selectedStatus = 'الكل';
 
   @override
   Widget build(BuildContext context) {
@@ -27,100 +35,95 @@ class OrdersScreen extends StatelessWidget {
         label: const Text('طلب جديد'),
         icon: const Icon(Icons.add),
       ),
-      body: BlocBuilder<OrdersCubit, OrdersState>(
-        builder: (context, state) {
-          if (state is OrdersLoading) return const Center(child: CircularProgressIndicator());
-          if (state is OrdersError) return Center(child: Text(state.message));
-          if (state is OrdersLoaded) {
-            final orders = state.orders;
-            if (orders.isEmpty) return _buildEmptyState();
-            return _buildOrdersTable(context, orders);
-          }
-          return const SizedBox();
-        },
-      ),
-    );
-  }
+      body: Column(
+        children: [
+          // شريط البحث والفلتر
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'بحث بالعميل أو أمر البيع...',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                    ),
+                    onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: _selectedStatus,
+                  items: const [
+                    DropdownMenuItem(value: 'الكل', child: Text('الكل')),
+                    DropdownMenuItem(value: 'انتظار', child: Text('انتظار')),
+                    DropdownMenuItem(value: 'مجدول', child: Text('مجدول')),
+                  ],
+                  onChanged: (value) => setState(() => _selectedStatus = value!),
+                ),
+              ],
+            ),
+          ),
 
-  // 🟢 تعديل دالة عرض الفورم لتنتظر (await) إغلاق الدايلوج قبل تحديث التخطيط
-  void _showOrderForm(BuildContext context, {dynamic order}) async {
-    await showDialog(
-      context: context,
-      builder: (_) => OrderForm(order: order),
-    );
-
-    // أول ما يقفل ديلوج التعديل/الإضافة، بننعش شاشة التخطيط احتياطياً لو حصل حفظ
-    if (context.mounted) {
-      try { context.read<PlanningCubit>().loadData(); } catch (_) {}
-    }
-  }
-
-  // ديلوج تأكيد مسح الكل
-  void _confirmClear(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تنبيه خطير'),
-        content: const Text('هل أنت متأكد من مسح جميع الطلبات وسجلات الإنتاج بالكامل؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-          TextButton(
-            onPressed: () {
-              context.read<OrdersCubit>().clearAll();
-              try { context.read<PlanningCubit>().loadData(); } catch (_) {}
-              Navigator.pop(ctx);
-            },
-            child: const Text('مسح الكل', style: TextStyle(color: Colors.red)),
+          // الجدول (الحل النهائي للـ Overflow)
+          Expanded(
+            child: BlocBuilder<OrdersCubit, OrdersState>(
+              builder: (context, state) {
+                if (state is OrdersLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (state is OrdersError) {
+                  return Center(child: Text('خطأ: ${state.message}'));
+                }
+                if (state is OrdersLoaded) {
+                  final filteredOrders = _filterOrders(state.orders);
+                  if (filteredOrders.isEmpty) {
+                    return _buildEmptyState();
+                  }
+                  return _buildScrollableTable(context, filteredOrders);
+                }
+                return const SizedBox();
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  // 🟢 ديلوج تأكيد حذف أوردر معين (الجديد)
-  void _confirmDelete(BuildContext context, int orderId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تأكيد الحذف'),
-        content: const Text('هل أنت متأكد من حذف هذا الطلب؟ سيتم تصفير خطة الإنتاج المرتبطة به.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx); // إغلاق الديلوج أولاً
+  List<Order> _filterOrders(List<Order> orders) {
+    return orders.where((order) {
+      final matchesSearch = order.customerName.toLowerCase().contains(_searchQuery) ||
+          (order.salesOrder?.toLowerCase().contains(_searchQuery) ?? false);
 
-              // استدعاء دالة الحذف الذكية من الكيوبيت مباشرة
-              await ctx.read<OrdersCubit>().deleteOrderWithReset(orderId);
+      final matchesStatus = _selectedStatus == 'الكل' ||
+          (_selectedStatus == 'انتظار' && order.status == 'انتظار') ||
+          (_selectedStatus == 'مجدول' && order.status == 'تم الجدول');
 
-              if (context.mounted) {
-                try { context.read<PlanningCubit>().loadData(); } catch (_) {}
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم حذف الطلب وتحديث سجل الإنتاج')),
-                );
-              }
-            },
-            child: const Text('حذف المعطيات', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
+      return matchesSearch && matchesStatus;
+    }).toList();
   }
 
-  Widget _buildOrdersTable(BuildContext context, List<dynamic> orders) {
-    return RefreshIndicator(
-      onRefresh: () => context.read<OrdersCubit>().fetchOrders(),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(8),
-        child: Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  Widget _buildScrollableTable(BuildContext context, List<Order> orders) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.vertical,
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
               headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
               columns: _buildColumns(),
-              rows: orders.map((o) => _buildDataRow(context, o)).toList(),
+              rows: List.generate(
+                orders.length,
+                    (index) => _buildDataRow(context, orders[index], index),
+              ),
             ),
           ),
         ),
@@ -130,6 +133,7 @@ class OrdersScreen extends StatelessWidget {
 
   List<DataColumn> _buildColumns() {
     return const [
+      DataColumn(label: Text('م')),
       DataColumn(label: Text('التاريخ')),
       DataColumn(label: Text('أمر البيع')),
       DataColumn(label: Text('العميل')),
@@ -146,67 +150,152 @@ class OrdersScreen extends StatelessWidget {
     ];
   }
 
-  DataRow _buildDataRow(BuildContext context, dynamic o) {
-    double weightInKg = o.totalTons * 1000;
-    double avgRollWeight = o.quantity > 0 ? (weightInKg / o.quantity) : 0;
-    int remaining = o.quantity - (o.plannedQuantity ?? 0);
+  DataRow _buildDataRow(BuildContext context, Order o, int index) {
+    final weightInKg = o.totalTons * 1000;
+    final avgRollWeight = o.quantity > 0 ? (weightInKg / o.quantity) : 0;
+    final remaining = o.quantity - (o.plannedQuantity ?? 0);
 
-    return DataRow(cells: [
-      DataCell(Text(o.date.toString().split(' ')[0])),
-      DataCell(Text(o.salesOrder ?? '-')),
-      DataCell(Text(o.customerName)),
-      DataCell(Text('${o.width.toInt()} سم')),
-      DataCell(Text('${o.diameter?.toInt() ?? 0} سم')),
-      DataCell(Text('${o.grams.toInt()}g')),
-      DataCell(Text(o.quantity.toString())),
-      DataCell(Text((o.plannedQuantity ?? 0).toString())),
-      DataCell(
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          decoration: BoxDecoration(
-            color: remaining > 0 ? Colors.orange.shade100 : Colors.green.shade100,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            remaining.toString(),
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: remaining > 0 ? Colors.orange.shade900 : Colors.green.shade900,
-            ),
+    final (bgColor, textColor) = _getRemainingColors(remaining);
+
+    return DataRow(
+      color: WidgetStateProperty.all(index.isEven ? Colors.grey.shade50 : Colors.white),
+      cells: [
+        DataCell(Text('${index + 1}')),
+        DataCell(Text(o.date.toString().split(' ')[0])),
+        DataCell(Text(o.salesOrder ?? '-')),
+        DataCell(Text(o.customerName)),
+        DataCell(Text('${o.width.toInt()} سم')),
+        DataCell(Text('${o.diameter.toInt()} سم')),
+        DataCell(Text('${o.grams.toInt()} g')),
+        DataCell(Text(o.quantity.toString())),
+        DataCell(Text((o.plannedQuantity ?? 0).toString())),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
+            child: Text(remaining.toString(), style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
           ),
         ),
-      ),
-      DataCell(Text('${avgRollWeight.toStringAsFixed(1)} ك')),
-      DataCell(Text('${weightInKg.toInt()} ك')),
-      DataCell(_buildStatusChip(o.status)),
-      DataCell(Row(
-        children: [
-          // 1️⃣ زرار التعديل الذكي (تم إصلاح المشكلة)
-          IconButton(
-            icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-            onPressed: () => _showOrderForm(context, order: o), // بيفتح الفورم بسسسس
+        DataCell(Text('${avgRollWeight.toStringAsFixed(1)} ك')),
+        DataCell(Text('${weightInKg.toInt()} ك')),
+        DataCell(_buildStatusChip(o.status)),
+        DataCell(
+          Row(
+            children: [
+              IconButton(icon: const Icon(Icons.edit, color: Colors.blue, size: 20), onPressed: () => _showOrderForm(context, order: o)),
+              IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 20), onPressed: () => _confirmDelete(context, o.id!)),
+            ],
           ),
+        ),
+      ],
+    );
+  }
 
-          // 2️⃣ زرار الحذف الذكي (ديلوج تأكيد يمنع الحذف المفاجئ)
-          IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-            onPressed: () => _confirmDelete(context, o.id!),
-          ),
-        ],
-      )),
-    ]);
+  (Color, Color) _getRemainingColors(int remaining) {
+    if (remaining < 0) return (Colors.red.shade100, Colors.red.shade900);
+    if (remaining > 0) return (Colors.orange.shade100, Colors.orange.shade900);
+    return (Colors.green.shade100, Colors.green.shade900);
   }
 
   Widget _buildStatusChip(String status) {
-    bool isDone = status == "تم الجدول";
+    final isDone = status == "تم الجدول";
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isDone ? Colors.green.shade100 : Colors.orange.shade100,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(isDone ? "مجدول" : "انتظار", style: TextStyle(color: isDone ? Colors.green.shade900 : Colors.orange.shade900, fontSize: 11)),
+      child: Text(
+        isDone ? "مجدول" : "انتظار",
+        style: TextStyle(color: isDone ? Colors.green.shade900 : Colors.orange.shade900, fontSize: 11),
+      ),
     );
+  }
+
+  // ====================== Dialogs ======================
+  Future<void> _showOrderForm(BuildContext context, {Order? order}) async {
+    final didSave = await showDialog<bool>(
+      context: context,
+      builder: (_) => OrderForm(order: order),
+    ) ??
+        false;
+
+    if (didSave && context.mounted) {
+      context.read<OrdersCubit>().fetchOrders();
+      _refreshPlanning(context);
+    }
+  }
+
+  void _confirmClear(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تنبيه خطير'),
+        content: const Text('هل أنت متأكد من مسح جميع الطلبات وسجلات الإنتاج بالكامل؟'),
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () async {
+              await context.read<OrdersCubit>().clearAll();
+              _refreshPlanning(context);
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('تم مسح جميع البيانات')));
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('مسح الكل', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, int orderId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: const Text('هل أنت متأكد من حذف هذا الطلب؟ سيتم تصفير الخطة المرتبطة به.'),
+        icon: const Icon(Icons.delete_forever, color: Colors.red),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx); // إغلاق الـ Dialog أولاً
+
+              try {
+                await context.read<OrdersCubit>().deleteOrderWithReset(orderId);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('تم حذف الطلب بنجاح'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('فشل الحذف: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+  void _refreshPlanning(BuildContext context) {
+    try {
+      context.read<PlanningCubit>().loadData();
+    } catch (_) {}
   }
 
   Widget _buildEmptyState() {
@@ -214,8 +303,12 @@ class OrdersScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey.shade400),
-          const Text('لا توجد طلبات مسجلة حالياً', style: TextStyle(fontSize: 18, color: Colors.grey)),
+          Icon(Icons.search_off, size: 80, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text(
+            _searchQuery.isNotEmpty ? 'لا توجد نتائج للبحث' : 'لا توجد طلبات مسجلة حالياً',
+            style: const TextStyle(fontSize: 18, color: Colors.grey),
+          ),
         ],
       ),
     );

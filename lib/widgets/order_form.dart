@@ -308,14 +308,12 @@ class _OrderFormState extends State<OrderForm> {
     );
   }
 
-  void _handleSave(bool isEditing) async {
-    // التحقق من صحة النموذج الرئيسي (اسم العميل)
+  Future<void> _handleSave(bool isEditing) async {
     if (!_formKey.currentState!.validate()) {
       _showSnackBar('برجاء تصحيح الأخطاء الظاهرة', isError: false);
       return;
     }
 
-    // التحقق من صحة كل صف
     for (int i = 0; i < _orderRows.length; i++) {
       final row = _orderRows[i];
       if (row['salesOrder'].text.trim().isEmpty) {
@@ -354,18 +352,20 @@ class _OrderFormState extends State<OrderForm> {
           totalTons: double.parse(row['tons'].text),
           diameter: row['diameter'],
           diameterWeight: _diameterSpecs[row['diameter']]!,
-          status: isEditing ? 'انتظار' : 'انتظار', // في وضع التعديل، نعيد تعيين الحالة
-          plannedQuantity: isEditing ? 0 : 0, // إعادة تعيين المجدول
+          status: 'انتظار',   // ببساطة، دائمًا انتظار
+          plannedQuantity: 0, // دائمًا صفر، لأن الإضافة والتعديل يحتاجان بداية جديدة
         ));
       }
 
       await context.read<OrdersCubit>().saveOrders(ordersToSave, isEditing);
-      if (context.mounted) Navigator.pop(context);
+      if (context.mounted) {
+        Navigator.pop(context, true); // ✅ إرجاع true عند النجاح
+      }
     } catch (e) {
       _showSnackBar('حدث خطأ أثناء الحفظ: $e');
+      if (context.mounted) Navigator.pop(context, false); // ❌ إرجاع false عند الفشل
     }
   }
-
   void _showSnackBar(String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
