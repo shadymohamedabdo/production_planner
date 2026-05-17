@@ -25,6 +25,7 @@ class DatabaseHelper {
       path,
       version: 6, // تم الترقية لـ 6 لدعم الحسابات الجزئية للبكر
       onCreate: (db, version) async {
+        // orders
         await db.execute('''
           CREATE TABLE orders(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +42,7 @@ class DatabaseHelper {
             diameterWeight REAL
           )
         ''');
+        // production_plans
         await db.execute('''
           CREATE TABLE production_plans(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,6 +52,7 @@ class DatabaseHelper {
             waste REAL
           )
         ''');
+        // plan_items
         await db.execute('''
           CREATE TABLE plan_items(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,6 +64,7 @@ class DatabaseHelper {
           )
         ''');
       },
+
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 3) {
           try { await db.execute("ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'انتظار'"); } catch (e) {}
@@ -71,7 +75,9 @@ class DatabaseHelper {
           try {
             await db.execute('''CREATE TABLE production_plans(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, grams REAL, totalWidth REAL, waste REAL)''');
             await db.execute('''CREATE TABLE plan_items(id INTEGER PRIMARY KEY AUTOINCREMENT, planId INTEGER, orderId INTEGER, customerName TEXT, width REAL, quantity INTEGER)''');
-          } catch (e) {}
+          } catch (e) {
+
+          }
         }
         if (oldVersion < 5) {
           try { await db.execute("ALTER TABLE orders ADD COLUMN salesOrder TEXT"); } catch (e) {}
@@ -82,8 +88,9 @@ class DatabaseHelper {
       },
     );
   }
-
-  // الدالة الأساسية لاستهلاك البكر بدون تصفير الكمية الكلية
+  // دالة مسؤولة عن خصم البكر المستخدمة من الأوردر
+// وتحديث plannedQuantity والحالة (انتظار / تم الجدول)
+// بعد كل عملية تخطيط أو إنتاج
   Future<void> consumeOrder(int orderId, int usedQty) async {
     final dbClient = await database;
     await dbClient.transaction((txn) async {
@@ -106,7 +113,6 @@ class DatabaseHelper {
       );
     });
   }
-
   Future<int> insertOrder(Order order) async {
     final dbClient = await database;
     return await dbClient.insert('orders', order.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
@@ -182,10 +188,11 @@ class DatabaseHelper {
     }
     return plansMap.values.toList();
   }
+  // جلب جميع خطط الإنتاج المحفوظة مع تفاصيل كل رصة وربطها بعناصرها من الداتابيز
   Future<List<ProductionPlan>> getAllProductionPlans() async {
     return await getSavedPlans();
   }
-// أضف هذه الدالة أو حدث دالة التعديل عندك
+  // تحديث الأوردر وتصفير المجدول
   Future<int> updateOrderAndResetPlanning(Order order) async {
     final dbClient = await database;
     return await dbClient.update(
@@ -202,6 +209,7 @@ class DatabaseHelper {
       whereArgs: [order.id],
     );
   }
+  //// تصفير التخطيط لكل الطلبات وإرجاع حالتها إلى "انتظار"
   Future<void> resetAllOrdersPlanning() async {
     final dbClient = await database;
     await dbClient.update(

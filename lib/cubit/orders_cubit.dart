@@ -7,7 +7,6 @@ import 'orders_state.dart';
 class OrdersCubit extends Cubit<OrdersState> {
   final DatabaseHelper db = DatabaseHelper();
 
-
   OrdersCubit() : super(OrdersInitial());
 
   // جلب كل الطلبات
@@ -21,43 +20,48 @@ class OrdersCubit extends Cubit<OrdersState> {
     }
   }
 
-  // إضافة طلبات (يدعم إضافة قائمة كاملة)
-// إضافة طلبات أو تعديلها (تعديل آمن)
+  // إضافة أو تعديل الطلبات (تحسين الأداء ونقل منطق التنظيف هنا)
   Future<void> saveOrders(List<Order> orders, bool isEditing) async {
     try {
       for (var order in orders) {
         if (isEditing) {
-          // ✅ استخدم الدالة اللي بتصفر الجدولة للطلب المبرمج
           await db.updateOrderAndResetPlanning(order);
-
-          // 🟢 نقلنا السطر هنا جوه الـ if عشان يمسح التخطيط في التعديل فقط
-          await db.clearAllPlans();
         } else {
-          // في حالة الإضافة الجديدة، بنضيف بس من غير ما نمسح سجل الإنتاج والتخطيط القديم
           await db.insertOrder(order);
         }
       }
 
-      // نحدث البيانات في الشاشة فوراً
-      fetchOrders();
+      // 🟢 تحسين الأداء: مسح وتصفير الخطط مرة واحدة فقط بعد انتهاء اللووب بالكامل
+      if (isEditing) {
+        await db.clearAllPlans();
+        await db.resetAllOrdersPlanning();
+      }
+
+      fetchOrders(); // تحديث الشاشة
     } catch (e) {
       emit(const OrdersError("حدث خطأ أثناء حفظ البيانات"));
     }
-  }  // حذف طلب واحد
-  Future<void> deleteOrder(int id) async {
-    try {
-      await db.deleteOrder(id);
-      fetchOrders();
-    } catch (e) {
-      emit(const OrdersError("فشل الحذف"));
-    }
   }
 
+  // 🟢 دالة الحذف الذكية: بتنظف الجداول وتحذف الطلب في خطوة واحدة من الخلفية
+  Future<void> deleteOrderWithReset(int id) async {
+    try {
+      await db.clearAllPlans();
+      await db.resetAllOrdersPlanning();
+      await db.deleteOrder(id);
+
+      fetchOrders(); // تحديث الشاشة فوراً بعد الحذف
+    } catch (e) {
+      emit(const OrdersError("فشل الحذف وسجل الإنتاج ممتلئ"));
+    }
+  }
 
   // مسح الكل
   Future<void> clearAll() async {
     try {
       await db.clearAllOrders();
+      await db.clearAllPlans();
+      await db.resetAllOrdersPlanning();
       emit(const OrdersLoaded([]));
     } catch (e) {
       emit(const OrdersError("فشل مسح البيانات"));

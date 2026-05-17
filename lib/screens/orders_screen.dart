@@ -4,7 +4,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/orders_cubit.dart';
 import '../cubit/orders_state.dart';
 import '../cubit/planning_cubit.dart';
-import '../database/database_helper.dart';
 import '../widgets/order_form.dart';
 
 class OrdersScreen extends StatelessWidget {
@@ -12,7 +11,6 @@ class OrdersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('سجل الطلبات'),
@@ -44,26 +42,32 @@ class OrdersScreen extends StatelessWidget {
     );
   }
 
-  // دالة عرض الفورم
-  void _showOrderForm(BuildContext context, {dynamic order}) {
-    showDialog(
+  // 🟢 تعديل دالة عرض الفورم لتنتظر (await) إغلاق الدايلوج قبل تحديث التخطيط
+  void _showOrderForm(BuildContext context, {dynamic order}) async {
+    await showDialog(
       context: context,
       builder: (_) => OrderForm(order: order),
     );
+
+    // أول ما يقفل ديلوج التعديل/الإضافة، بننعش شاشة التخطيط احتياطياً لو حصل حفظ
+    if (context.mounted) {
+      try { context.read<PlanningCubit>().loadData(); } catch (_) {}
+    }
   }
 
-  // تأكيد مسح الكل
+  // ديلوج تأكيد مسح الكل
   void _confirmClear(BuildContext context) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('تنبيه'),
-        content: const Text('هل أنت متأكد من مسح جميع الطلبات؟'),
+        title: const Text('تنبيه خطير'),
+        content: const Text('هل أنت متأكد من مسح جميع الطلبات وسجلات الإنتاج بالكامل؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           TextButton(
             onPressed: () {
               context.read<OrdersCubit>().clearAll();
+              try { context.read<PlanningCubit>().loadData(); } catch (_) {}
               Navigator.pop(ctx);
             },
             child: const Text('مسح الكل', style: TextStyle(color: Colors.red)),
@@ -73,7 +77,36 @@ class OrdersScreen extends StatelessWidget {
     );
   }
 
-  // تصميم الجدول (نفس تصميمك مع تحسينات طفيفة للأداء)
+  // 🟢 ديلوج تأكيد حذف أوردر معين (الجديد)
+  void _confirmDelete(BuildContext context, int orderId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: const Text('هل أنت متأكد من حذف هذا الطلب؟ سيتم تصفير خطة الإنتاج المرتبطة به.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx); // إغلاق الديلوج أولاً
+
+              // استدعاء دالة الحذف الذكية من الكيوبيت مباشرة
+              await ctx.read<OrdersCubit>().deleteOrderWithReset(orderId);
+
+              if (context.mounted) {
+                try { context.read<PlanningCubit>().loadData(); } catch (_) {}
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم حذف الطلب وتحديث سجل الإنتاج')),
+                );
+              }
+            },
+            child: const Text('حذف المعطيات', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildOrdersTable(BuildContext context, List<dynamic> orders) {
     return RefreshIndicator(
       onRefresh: () => context.read<OrdersCubit>().fetchOrders(),
@@ -95,7 +128,6 @@ class OrdersScreen extends StatelessWidget {
     );
   }
 
-  // فصل الـ Row والـ Columns لتحسين نظافة الكود
   List<DataColumn> _buildColumns() {
     return const [
       DataColumn(label: Text('التاريخ')),
@@ -105,19 +137,18 @@ class OrdersScreen extends StatelessWidget {
       DataColumn(label: Text('القطر')),
       DataColumn(label: Text('الجرام')),
       DataColumn(label: Text('العدد الكلي')),
-      DataColumn(label: Text('المجدول')),     // جديد
-      DataColumn(label: Text('المتبقي')),     // جديد
+      DataColumn(label: Text('المجدول')),
+      DataColumn(label: Text('المتبقي')),
       DataColumn(label: Text('متوسط البكرة')),
       DataColumn(label: Text('الوزن الكلي')),
       DataColumn(label: Text('الحالة')),
       DataColumn(label: Text('إجراءات')),
     ];
   }
+
   DataRow _buildDataRow(BuildContext context, dynamic o) {
-    // حساب الوزن
     double weightInKg = o.totalTons * 1000;
     double avgRollWeight = o.quantity > 0 ? (weightInKg / o.quantity) : 0;
-    // حساب المتبقي
     int remaining = o.quantity - (o.plannedQuantity ?? 0);
 
     return DataRow(cells: [
@@ -128,7 +159,7 @@ class OrdersScreen extends StatelessWidget {
       DataCell(Text('${o.diameter?.toInt() ?? 0} سم')),
       DataCell(Text('${o.grams.toInt()}g')),
       DataCell(Text(o.quantity.toString())),
-      DataCell(Text((o.plannedQuantity ?? 0).toString())),           // المجدول
+      DataCell(Text((o.plannedQuantity ?? 0).toString())),
       DataCell(
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -150,52 +181,22 @@ class OrdersScreen extends StatelessWidget {
       DataCell(_buildStatusChip(o.status)),
       DataCell(Row(
         children: [
-          // 1️⃣ زرار التعديل الذكي
+          // 1️⃣ زرار التعديل الذكي (تم إصلاح المشكلة)
           IconButton(
-              icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-              onPressed: () async {
-                // بنستنى لحد ما يفتح شاشة التعديل ويخلص حفظ ويقفلها
-                _showOrderForm(context, order: o);
+            icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+            onPressed: () => _showOrderForm(context, order: o), // بيفتح الفورم بسسسس
+          ),
 
-                // أول ما يرجع من التعديل، بنصفر السجل القديم فوراً عشان المقاسات الجديدة متبوظش الحسبة
-                await DatabaseHelper().clearAllPlans();
-                await DatabaseHelper().resetAllOrdersPlanning();
-
-                // نحدث بيانات الشاشات فوراً
-                if (context.mounted) {
-                  context.read<OrdersCubit>().fetchOrders();
-                  try { context.read<PlanningCubit>().loadData(); } catch (_) {}
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم تعديل الطلب وتحديث سجل الإنتاج')),
-                  );
-                }
-              }),
-
-          // 2️⃣ زرار الحذف الذكي
+          // 2️⃣ زرار الحذف الذكي (ديلوج تأكيد يمنع الحذف المفاجئ)
           IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-              onPressed: () async {
-                // قبل ما نحذف، بننظف جداول الإنتاج والتخطيط المرتبطة بيه
-                await DatabaseHelper().clearAllPlans();
-                await DatabaseHelper().resetAllOrdersPlanning();
-
-                // نحذف الطلب نفسه من الداتا بيز
-                if (context.mounted) {
-                  await context.read<OrdersCubit>().deleteOrder(o.id!);
-
-                  // نحدث الشاشات عشان الأرقام ترجع صفر والمحذوف يختفي
-                  context.read<OrdersCubit>().fetchOrders();
-                  try { context.read<PlanningCubit>().loadData(); } catch (_) {}
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم حذف الطلب وتصفير سجل الإنتاج بالكامل')),
-                  );
-                }
-              }),
+            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+            onPressed: () => _confirmDelete(context, o.id!),
+          ),
         ],
-      )),    ]);
+      )),
+    ]);
   }
+
   Widget _buildStatusChip(String status) {
     bool isDone = status == "تم الجدول";
     return Container(

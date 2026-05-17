@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:production_planner/widgets/constants.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // استيراد الـ Cubits
@@ -41,6 +42,8 @@ class ProductionPlanningApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
+        scaffoldMessengerKey: AppSnackBar.messengerKey,
+
         debugShowCheckedModeBanner: false,
         title: 'نظام تخطيط الإنتاج',
 

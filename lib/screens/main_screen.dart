@@ -80,20 +80,13 @@ class MainDrawer extends StatelessWidget {
             ),
           ).then((_) {
             // ✅ السحر هنا: لما ترجع من أي صفحة، بنحدث بيانات الشاشتين فوراً
-            try {
-              // 1. تحديث صفحة الطلبات (عشان لو الانتاج صفر البكر يظهر هنا)
+
+            if (parentContext.mounted) {
               parentContext.read<OrdersCubit>().fetchOrders();
-
-              // 2. تحديث صفحة التخطيط (عشان لو عدلنا أوردر يظهر في المتبقي)
-              // ملاحظة: لو كنت مستخدم BlocProvider في الـ main.dart للـ PlanningCubit
-              // parentContext.read<PlanningCubit>().loadData();
-
-              debugPrint("تمت المزامنة بين الصفحات بنجاح");
-            } catch (e) {
-              debugPrint("Sync Error: $e");
             }
           });
         }
       },
     );
-  }}
+  }
+}
