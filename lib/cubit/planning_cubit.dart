@@ -71,15 +71,17 @@ class PlanningCubit extends Cubit<PlanningState> {
       }
 
       // حفظ واستهلاك الكميات المحددة في كل أوردر
+// 🟢 داخل ملف planning_cubit.dart في دالة startGeneration:
       for (var plan in newPlans) {
         for (var item in plan.items) {
           if (item.orderId != 0) {
-            // نحدث الكمية المجدولة بمقدار ما تم استهلاكه في هذه النقلة
+            // بما أن item.quantity = 1 لكل بكرة فريدة في الرصة بالخوارزمية
+            // تأكد أنك تستهلك بمقدار 1، وإذا كانت الرصة تُكرر بناءً على نقلات الماكينة،
+            // اضرب الـ item.quantity في عدد النقلات الفعلي.
             await db.consumeOrder(item.orderId, item.quantity);
           }
         }
       }
-
       await db.saveProductionPlans(newPlans);
 
       final allPlansFromDb = await db.getSavedPlans();

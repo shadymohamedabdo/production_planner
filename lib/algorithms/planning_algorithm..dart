@@ -38,26 +38,27 @@ class PlanningAlgorithm {
       // يعني لو أوردر فيه 5 بكرات → يتحول لـ 5 RollUnit
       List<RollUnit> availableRolls = [];
 
+// 🟢 داخل ملف planning_algorithm.dart ابحث عن اللوب واستبدلها بالتالي:
       for (var order in gramOrders) {
+        // حساب المتبقي الحقيقي للأوردر قبل تفكيكه لبكرات
+        int planned = order.plannedQuantity ?? 0;
+        int remainingQty = order.quantity - planned;
 
-        // بنكرر حسب عدد البكر
-        for (int i = 0; i < order.quantity; i++) {
+        // لو الأوردر اكتمل فعلياً تخطيه تماماً ولا تولد له بكرات
+        if (remainingQty <= 0) continue;
 
+        // التكرار بناءً على المتبقي وليس الكلي!
+        for (int i = 0; i < remainingQty; i++) {
           availableRolls.add(
             RollUnit(
               orderId: order.id ?? 0,
               customerName: order.customerName,
-
-              // تحويل المقاس من سم لمتر
               widthMeters: order.width / 100,
-
-              // الاحتفاظ بالمقاس الأصلي بالسم
               widthCm: order.width,
             ),
           );
         }
       }
-
       // لوب مستمرة لتكوين الرصات
       while (true) {
 

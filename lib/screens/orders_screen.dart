@@ -25,17 +25,23 @@ class _OrdersScreenState extends State<OrdersScreen> {
         title: const Text('سجل الطلبات'),
         actions: [
           // 🟢 الزر الجديد للانتقال السريع لشاشة التخطيط والمحاكاة
+// 🟢 الزر المطور للانتقال السريع لشاشة التخطيط والمحاكاة مع التحديث التلقائي
           IconButton(
-            icon: const Icon(Icons.analytics_outlined, color: Colors.indigo), // أيقونة تعبر عن المحاكاة والتخطيط
+            icon: const Icon(Icons.analytics_outlined, color: Colors.indigo),
             tooltip: 'التخطيط والمحاكاة',
-            onPressed: () {
-              Navigator.push(
+            onPressed: () async {
+              // 1️⃣ الانتظار حتى يغلق المستخدم شاشة التخطيط ويعود
+              await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const PlanningScreen()),
               );
+
+              // 2️⃣ بمجرد العودة، يتم تحديث الكيوبيت تلقائياً لجلب البيانات الجديدة من الداتا بيز
+              if (context.mounted) {
+                context.read<OrdersCubit>().fetchOrders();
+              }
             },
-          ),
-          // زر التحديث الحالي
+          ),          // زر التحديث الحالي
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.blue),
             tooltip: 'تحديث البيانات',
