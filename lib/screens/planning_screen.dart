@@ -185,7 +185,10 @@ class PlanningScreen extends StatelessWidget {
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                   child: Row(
+                    // 🟢 يبدأ الصف من اليمين إلى اليسار ليطابق الهيدر
+                    textDirection: TextDirection.rtl,
                     children: [
+                      // نفس ترتيب الهيدر بالظبط وبنفس نسب الـ flex:
                       Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center)),
                       Expanded(flex: 3, child: Text(customers, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
                       Expanded(flex: 4, child: Text(sizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo))),
@@ -196,8 +199,7 @@ class PlanningScreen extends StatelessWidget {
                 );
               }),
               const SizedBox(height: 8),
-            ],
-          ),
+            ],          ),
         ),
       ),
     );
@@ -293,10 +295,13 @@ class PlanningScreen extends StatelessWidget {
 
   Widget _buildTableHeader() {
     return Container(
-      color: Colors.blueGrey.shade50.withOpacity(0.9),
+      color: Colors.blueGrey.shade50.withValues(alpha: 0.9),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: const Row(
+        // 🟢 يبدأ الصف من اليمين إلى اليسار
+        textDirection: TextDirection.rtl,
         children: [
+          // نرتب العناصر في الكود تماماً كما تظهر على الشاشة من اليمين إلى اليسار:
           Expanded(flex: 1, child: Text("م", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           Expanded(flex: 3, child: Text("العميل", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           Expanded(flex: 4, child: Text("المقاس", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
@@ -305,9 +310,7 @@ class PlanningScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Widget _buildWaitingSection(List<Order> waiting) {
+  }  Widget _buildWaitingSection(List<Order> waiting) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
