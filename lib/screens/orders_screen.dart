@@ -147,16 +147,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
       child: Card(
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.vertical,
+        // 🟢 التغيير هنا: تغليف الجدول بـ Directionality لعرضه من اليمين إلى اليسار
+        child: Directionality(
+          textDirection: TextDirection.rtl,
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
-              columns: _buildColumns(),
-              rows: List.generate(
-                orders.length,
-                    (index) => _buildDataRow(context, orders[index], index),
+            scrollDirection: Axis.vertical,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
+                columns: _buildColumns(),
+                rows: List.generate(
+                  orders.length,
+                      (index) => _buildDataRow(context, orders[index], index),
+                ),
               ),
             ),
           ),
@@ -164,7 +168,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
     );
   }
-
   List<DataColumn> _buildColumns() {
     return const [
       DataColumn(label: Text('م')),
