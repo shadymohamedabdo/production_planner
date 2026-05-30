@@ -133,72 +133,77 @@ class PlanningScreen extends StatelessWidget {
       key: key,
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.93), // 2️⃣ جعل كارت الطقم شبه شفاف عشان يظهر التناسق مع الخلفية
+        color: Colors.white.withOpacity(0.93),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10)],
       ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          initiallyExpanded: false,
-          controlAffinity: ListTileControlAffinity.trailing,
-          title: Row(
-            textDirection: TextDirection.rtl,
-            children: [
-              Text("${indices.length} ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 18)),
-              const Text("طقم", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-              const SizedBox(width: 12),
-              const Text("|", style: TextStyle(color: Colors.grey)),
-              const SizedBox(width: 12),
-              Text("${firstPlan.grams.toInt()} ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-              const Text("جرام", style: TextStyle(fontSize: 14)),
-              const SizedBox(width: 12),
-              const Text("|", style: TextStyle(color: Colors.grey)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  "رصة: $headerSizes سم",
-                  style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87, fontSize: 14),
-                  overflow: TextOverflow.ellipsis,
+      child: Material(
+        // 🟢 الحل هنا: إضافة Material شفاف لحماية تأثير ضغط وتوسيع الكارت ومنع الـ Exception
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias, // يضمن قص تأثير الضغط عند الحواف المنحنية للكارت
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            initiallyExpanded: false,
+            controlAffinity: ListTileControlAffinity.trailing,
+            title: Row(
+              textDirection: TextDirection.rtl,
+              children: [
+                Text("${indices.length} ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 18)),
+                const Text("طقم", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                const SizedBox(width: 12),
+                const Text("|", style: TextStyle(color: Colors.grey)),
+                const SizedBox(width: 12),
+                Text("${firstPlan.grams.toInt()} ", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                const Text("جرام", style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 12),
+                const Text("|", style: TextStyle(color: Colors.grey)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "رصة: $headerSizes سم",
+                    style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
+              ],
+            ),
+            subtitle: Text(
+              "من نقلة رقم ${indices.first + 1} إلى ${indices.last + 1}",
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
+            ),
+            children: [
+              _buildTableHeader(),
+              ...indices.map((idx) {
+                final plan = allPlans[idx];
+                final customers = plan.items.map((e) => e.customerName).toSet().join(" + ");
+                final sizes = plan.items.map((e) => e.width.toInt().toString()).join(" + ");
+                return Container(
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                    color: idx % 2 == 0 ? Colors.white.withOpacity(0.7) : Colors.grey.shade50.withOpacity(0.7),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                  child: Row(
+                    children: [
+                      Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center)),
+                      Expanded(flex: 3, child: Text(customers, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
+                      Expanded(flex: 4, child: Text(sizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo))),
+                      Expanded(flex: 2, child: Text(plan.totalWidth.toStringAsFixed(2), textAlign: TextAlign.center)),
+                      Expanded(flex: 1, child: Text(plan.waste.toStringAsFixed(2), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
+                    ],
+                  ),
+                );
+              }).toList(),
+              const SizedBox(height: 8),
             ],
           ),
-          subtitle: Text(
-            "من نقلة رقم ${indices.first + 1} إلى ${indices.last + 1}",
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
-          ),
-          children: [
-            _buildTableHeader(),
-            ...indices.map((idx) {
-              final plan = allPlans[idx];
-              final customers = plan.items.map((e) => e.customerName).toSet().join(" + ");
-              final sizes = plan.items.map((e) => e.width.toInt().toString()).join(" + ");
-              return Container(
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                  color: idx % 2 == 0 ? Colors.white.withOpacity(0.7) : Colors.grey.shade50.withOpacity(0.7),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                child: Row(
-                  children: [
-                    Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center)),
-                    Expanded(flex: 3, child: Text(customers, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
-                    Expanded(flex: 4, child: Text(sizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo))),
-                    Expanded(flex: 2, child: Text(plan.totalWidth.toStringAsFixed(2), textAlign: TextAlign.center)),
-                    Expanded(flex: 1, child: Text(plan.waste.toStringAsFixed(2), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
-                  ],
-                ),
-              );
-            }).toList(),
-            const SizedBox(height: 8),
-          ],
         ),
       ),
     );
   }
-
   List<List<int>> _groupPlans(List<ProductionPlan> plans) {
     if (plans.isEmpty) return [];
     List<List<int>> groups = [];

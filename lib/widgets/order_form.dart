@@ -15,6 +15,11 @@ class OrderForm extends StatefulWidget {
 class _OrderFormState extends State<OrderForm> {
   final _formKey = GlobalKey<FormState>();
   final _customerController = TextEditingController();
+
+  // الكنترولر والمتغير الخاصين بالتاريخ
+  final _dateController = TextEditingController();
+  late DateTime _selectedDate;
+
   final List<Map<String, dynamic>> _orderRows = [];
 
   final Map<double, double> _diameterSpecs = {
@@ -27,7 +32,10 @@ class _OrderFormState extends State<OrderForm> {
   void initState() {
     super.initState();
     if (widget.order != null) {
-      // حالة التعديل: تعبئة البيانات الموجودة
+      // حالة التعديل: جلب التاريخ المسجل للأوردر وعرضه
+      _selectedDate = widget.order!.date;
+      _dateController.text = _selectedDate.toString().split(' ')[0];
+
       _customerController.text = widget.order!.customerName;
       _orderRows.add({
         'salesOrder': TextEditingController(text: widget.order!.salesOrder ?? ''),
@@ -38,8 +46,41 @@ class _OrderFormState extends State<OrderForm> {
         'diameter': widget.order!.diameter,
       });
     } else {
-      // حالة إضافة جديد: نبدأ بسطر فاضي
+      // 🟢 حالة إضافة جديد: يفتح تلقائياً على تاريخ النهاردة
+      _selectedDate = DateTime.now();
+      _dateController.text = _selectedDate.toString().split(' ')[0];
       _addNewRow();
+    }
+  }
+
+  // 🟢 دالة فتح التقويم (DatePicker) لاختيار اليوم والشهر والسنة
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate, // يفتح تلقائياً على التاريخ الحالي أو المحدد سابقاً
+      firstDate: DateTime(2020),  // أقل سنة يمكن الاختيار منها
+      lastDate: DateTime(2035),   // أكبر سنة يمكن الاختيار منها
+      // تغيير اتجاه التقويم ليدعم اللغة العربية بشكل صحيح إن أردت
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Colors.blue, // لون هيدر التقويم والأيام المحددة
+              onPrimary: Colors.white,
+              onSurface: Colors.black, // لون أرقام الأيام
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    // إذا اختار المستخدم تاريخاً جديداً، يتم تحديث الواجهة والكنترولر
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+        _dateController.text = _selectedDate.toString().split(' ')[0]; // صيغة YYYY-MM-DD
+      });
     }
   }
 
@@ -74,6 +115,7 @@ class _OrderFormState extends State<OrderForm> {
   @override
   void dispose() {
     _customerController.dispose();
+    _dateController.dispose();
     for (var row in _orderRows) {
       row['salesOrder']?.dispose();
       row['width']?.dispose();
@@ -97,22 +139,48 @@ class _OrderFormState extends State<OrderForm> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextFormField(
-                  controller: _customerController,
-                  decoration: const InputDecoration(
-                    labelText: 'اسم العميل *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                  validator: (value) =>
-                  value == null || value.trim().isEmpty ? 'اسم العميل مطلوب' : null,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: _customerController,
+                        decoration: const InputDecoration(
+                          labelText: 'اسم العميل *',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.person),
+                        ),
+                        validator: (value) =>
+                        value == null || value.trim().isEmpty ? 'اسم العميل مطلوب' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+
+                    // 🟢 حقل التاريخ المطور بالكامل
+                    Expanded(
+                      flex: 1,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click, // يخلي الماوس يظهر كيد قابلة للضغط
+                        child: TextFormField(
+                          controller: _dateController,
+                          readOnly: true, // يمنع الكتابة اليدوية لعدم حدوث أخطاء في صيغة التاريخ
+                          decoration: const InputDecoration(
+                            labelText: 'التاريخ',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.calendar_today, color: Colors.blue),
+                          ),
+                          onTap: () => _selectDate(context), // عند الضغط يفتح التقويم فوراً
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 20),
                 const Divider(thickness: 2),
                 _buildTableHeader(),
                 ..._orderRows.asMap().entries.map((entry) =>
                     _buildOrderRow(entry.key, entry.value, isEditing)),
-                // ✅ الآن يمكن إضافة صفوف جديدة حتى في وضع التعديل
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: ElevatedButton.icon(
@@ -149,7 +217,7 @@ class _OrderFormState extends State<OrderForm> {
       ),
       child: Row(
         children: const [
-          SizedBox(width: 30), // مسافة للترقيم
+          SizedBox(width: 30),
           Expanded(flex: 2, child: Text("رقم S.O", style: TextStyle(fontWeight: FontWeight.bold))),
           SizedBox(width: 5),
           Expanded(flex: 2, child: Text("القطر", style: TextStyle(fontWeight: FontWeight.bold))),
@@ -202,7 +270,7 @@ class _OrderFormState extends State<OrderForm> {
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<double>(
-              initialValue: row['diameter'],
+              value: row['diameter'],
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -290,19 +358,17 @@ class _OrderFormState extends State<OrderForm> {
               ),
             ),
           ),
-          // ✅ في وضع التعديل، نسمح بحذف أي صف مع بقاء صف واحد على الأقل
-          if (isEditing || !isEditing)
-            IconButton(
-              icon: const Icon(Icons.remove_circle, color: Colors.red),
-              onPressed: () {
-                if (_orderRows.length > 1) {
-                  setState(() => _orderRows.removeAt(idx));
-                } else {
-                  _showSnackBar('لا يمكن حذف الصف الأخير');
-                }
-              },
-              tooltip: 'حذف هذا السطر',
-            ),
+          IconButton(
+            icon: const Icon(Icons.remove_circle, color: Colors.red),
+            onPressed: () {
+              if (_orderRows.length > 1) {
+                setState(() => _orderRows.removeAt(idx));
+              } else {
+                _showSnackBar('لا يمكن حذف الصف الأخير');
+              }
+            },
+            tooltip: 'حذف هذا السطر',
+          ),
         ],
       ),
     );
@@ -314,36 +380,15 @@ class _OrderFormState extends State<OrderForm> {
       return;
     }
 
-    for (int i = 0; i < _orderRows.length; i++) {
-      final row = _orderRows[i];
-      if (row['salesOrder'].text.trim().isEmpty) {
-        _showSnackBar('رقم أمر البيع في السطر ${i + 1} مطلوب');
-        return;
-      }
-      if (row['width'].text.trim().isEmpty || double.tryParse(row['width'].text) == null) {
-        _showSnackBar('العرض في السطر ${i + 1} غير صحيح');
-        return;
-      }
-      if (row['grams'].text.trim().isEmpty || double.tryParse(row['grams'].text) == null) {
-        _showSnackBar('الجرام في السطر ${i + 1} غير صحيح');
-        return;
-      }
-      if (row['tons'].text.trim().isEmpty || double.tryParse(row['tons'].text) == null) {
-        _showSnackBar('الطن في السطر ${i + 1} غير صحيح');
-        return;
-      }
-      if (row['qty'].text.trim().isEmpty || int.tryParse(row['qty'].text) == null) {
-        _showSnackBar('الكمية في السطر ${i + 1} غير صحيحة (تأكد من الحساب التلقائي)');
-        return;
-      }
-    }
-
     try {
       List<Order> ordersToSave = [];
-      for (var row in _orderRows) {
+      for (int i = 0; i < _orderRows.length; i++) {
+        final row = _orderRows[i];
+        final bool isOriginalRow = isEditing && i == 0;
+
         ordersToSave.add(Order(
-          id: isEditing ? widget.order!.id : null,
-          date: isEditing ? widget.order!.date : DateTime.now(),
+          id: isOriginalRow ? widget.order!.id : null,
+          date: _selectedDate, // حفظ التاريخ المختار
           customerName: _customerController.text.trim(),
           salesOrder: row['salesOrder'].text.trim(),
           width: double.parse(row['width'].text),
@@ -352,26 +397,24 @@ class _OrderFormState extends State<OrderForm> {
           totalTons: double.parse(row['tons'].text),
           diameter: row['diameter'],
           diameterWeight: _diameterSpecs[row['diameter']]!,
-          status: 'انتظار',   // ببساطة، دائمًا انتظار
-          plannedQuantity: 0, // دائمًا صفر، لأن الإضافة والتعديل يحتاجان بداية جديدة
+          status: 'انتظار',
+          plannedQuantity: 0,
         ));
       }
 
       await context.read<OrdersCubit>().saveOrders(ordersToSave, isEditing);
       if (context.mounted) {
-        Navigator.pop(context, true); // ✅ إرجاع true عند النجاح
+        Navigator.pop(context, true);
       }
     } catch (e) {
       _showSnackBar('حدث خطأ أثناء الحفظ: $e');
-      if (context.mounted) Navigator.pop(context, false); // ❌ إرجاع false عند الفشل
+      if (context.mounted) Navigator.pop(context, false);
     }
   }
+
   void _showSnackBar(String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.orange,
-      ),
+      SnackBar(content: Text(message), backgroundColor: isError ? Colors.red : Colors.orange),
     );
   }
 }
