@@ -288,7 +288,7 @@ class _OrderFormState extends State<OrderForm> {
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<double>(
-              value: row['diameter'],
+              initialValue: row['diameter'],
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),

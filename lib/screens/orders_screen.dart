@@ -65,10 +65,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ),
         ],
       ),      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showOrderForm(context),
-        label: const Text('طلب جديد'),
-        icon: const Icon(Icons.add),
-      ),
+      onPressed: () => _showOrderForm(context),
+      label: const Text('طلب جديد'),
+      icon: const Icon(Icons.add),
+    ),
       body: Column(
         children: [
           // شريط البحث والفلتر

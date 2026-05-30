@@ -86,7 +86,7 @@ class PlanningScreen extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Text(
@@ -181,7 +181,7 @@ class PlanningScreen extends StatelessWidget {
                 return Container(
                   decoration: BoxDecoration(
                     border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                    color: idx % 2 == 0 ? Colors.white.withOpacity(0.7) : Colors.grey.shade50.withOpacity(0.7),
+                    color: idx % 2 == 0 ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade50.withValues(alpha: 0.7),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                   child: Row(
@@ -238,7 +238,7 @@ class PlanningScreen extends StatelessWidget {
           Expanded(
             child: DropdownButtonFormField<double>(
               decoration: const InputDecoration(labelText: "اختر الجرام", filled: true, fillColor: Colors.transparent),
-              value: state.availableGrams.contains(state.selectedGram) && state.selectedGram != 0
+              initialValue: state.availableGrams.contains(state.selectedGram) && state.selectedGram != 0
                   ? state.selectedGram
                   : (state.availableGrams.isNotEmpty ? state.availableGrams.first : null),
               items: state.availableGrams.map((g) => DropdownMenuItem(
@@ -280,7 +280,7 @@ class PlanningScreen extends StatelessWidget {
 
   Widget _statCard(String title, String value, Color color) => Expanded(
     child: Card(
-      color: Colors.white.withOpacity(0.9), // 4️⃣ كروت الإحصائيات أصبحت متناسقة مع الخلفية
+      color: Colors.white.withValues(alpha: 0.9), // 4️⃣ كروت الإحصائيات أصبحت متناسقة مع الخلفية
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -324,7 +324,7 @@ class PlanningScreen extends StatelessWidget {
           ),
         ),
         Card(
-          color: Colors.red.shade50.withOpacity(0.92), // 5️⃣ كارت الانتظار ملون خفيف ومقروء جداً
+          color: Colors.red.shade50.withValues(alpha: 0.92), // 5️⃣ كارت الانتظار ملون خفيف ومقروء جداً
           child: Column(
             children: waiting.map((order) {
               final remaining = order.quantity - (order.plannedQuantity ?? 0);

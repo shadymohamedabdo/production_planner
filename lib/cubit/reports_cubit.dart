@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:production_planner/widgets/constants.dart';
 import '../../database/database_helper.dart';
 import '../../models/plan.dart';
 import 'reports_state.dart';
@@ -55,8 +56,7 @@ class ReportsCubit extends Cubit<ReportsState> {
         filename: 'خطة_إنتاج_${plan.grams.toInt()}_${DateTime.now().toString().split(' ')[0]}.pdf',
       );
     } catch (e) {
-      // يمكنك إضافة SnackBar من الـ UI
-      print("خطأ في طباعة التقرير: $e");
+      AppSnackBar.error("خطأ في طباعة التقرير: $e");
     } finally {
       emit(currentState.copyWith(isPrinting: false));
     }
@@ -91,7 +91,7 @@ class ReportsCubit extends Cubit<ReportsState> {
         filename: 'جميع_خطط_الإنتاج_${DateTime.now().toString().split(' ')[0]}.pdf',
       );
     } catch (e) {
-      print("خطأ في طباعة الكل: $e");
+      AppSnackBar.error("خطأ في طباعة الكل: $e");
     } finally {
       emit(currentState.copyWith(isPrinting: false));
     }
@@ -142,7 +142,7 @@ class ReportsCubit extends Cubit<ReportsState> {
         filename: 'تقارير_مجمعة_${DateTime.now().toString().split(' ')[0]}.pdf',
       );
     } catch (e) {
-      print("خطأ في الطباعة المجمعة: $e");
+      AppSnackBar.error("خطأ في الطباعة المجمعة: $e");
     } finally {
       emit(currentState.copyWith(isPrinting: false));
     }
