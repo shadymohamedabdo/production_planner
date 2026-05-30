@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:production_planner/screens/planning_screen.dart';
 import '../cubit/orders_cubit.dart';
 import '../cubit/orders_state.dart';
 import '../cubit/planning_cubit.dart';
@@ -23,15 +24,24 @@ class _OrdersScreenState extends State<OrdersScreen> {
       appBar: AppBar(
         title: const Text('سجل الطلبات'),
         actions: [
-          // 🟢 إضافة زر الريفرش وتحديث الكيوبيتس فوراً عند الضغط
+          // 🟢 الزر الجديد للانتقال السريع لشاشة التخطيط والمحاكاة
+          IconButton(
+            icon: const Icon(Icons.analytics_outlined, color: Colors.indigo), // أيقونة تعبر عن المحاكاة والتخطيط
+            tooltip: 'التخطيط والمحاكاة',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PlanningScreen()),
+              );
+            },
+          ),
+          // زر التحديث الحالي
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.blue),
             tooltip: 'تحديث البيانات',
             onPressed: () {
               context.read<OrdersCubit>().fetchOrders();
               _refreshPlanning(context);
-
-              // إشعار خفيف للمستخدم بتأكيد التحديث
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('تم تحديث البيانات بنجاح'),
@@ -41,14 +51,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
               );
             },
           ),
+          // زر مسح الكل الحالي
           IconButton(
             icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
             onPressed: () => _confirmClear(context),
             tooltip: 'مسح الكل',
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
+      ),      floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showOrderForm(context),
         label: const Text('طلب جديد'),
         icon: const Icon(Icons.add),
