@@ -23,8 +23,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
       appBar: AppBar(
         title: const Text('سجل الطلبات'),
         actions: [
+          // 🟢 إضافة زر الريفرش وتحديث الكيوبيتس فوراً عند الضغط
           IconButton(
-            icon: const Icon(Icons.delete_sweep),
+            icon: const Icon(Icons.refresh, color: Colors.blue),
+            tooltip: 'تحديث البيانات',
+            onPressed: () {
+              context.read<OrdersCubit>().fetchOrders();
+              _refreshPlanning(context);
+
+              // إشعار خفيف للمستخدم بتأكيد التحديث
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('تم تحديث البيانات بنجاح'),
+                  duration: Duration(seconds: 1),
+                  backgroundColor: Colors.blue,
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
             onPressed: () => _confirmClear(context),
             tooltip: 'مسح الكل',
           ),

@@ -133,10 +133,10 @@ class PlanningScreen extends StatelessWidget {
       key: key,
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.93),
+        color: Colors.white.withValues(alpha: 0.93),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10)],
       ),
       child: Material(
         // 🟢 الحل هنا: إضافة Material شفاف لحماية تأثير ضغط وتوسيع الكارت ومنع الـ Exception
@@ -160,13 +160,11 @@ class PlanningScreen extends StatelessWidget {
                 const Text("جرام", style: TextStyle(fontSize: 14)),
                 const SizedBox(width: 12),
                 const Text("|", style: TextStyle(color: Colors.grey)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    "رصة: $headerSizes سم",
-                    style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87, fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                const SizedBox(width: 17),
+                Text(
+                  "مقاس: $headerSizes سم",
+                  style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.red, fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -196,7 +194,7 @@ class PlanningScreen extends StatelessWidget {
                     ],
                   ),
                 );
-              }).toList(),
+              }),
               const SizedBox(height: 8),
             ],
           ),
@@ -223,14 +221,16 @@ class PlanningScreen extends StatelessWidget {
   }
 
   bool _compareLists(List<double> a, List<double> b) {
-    for (int i = 0; i < a.length; i++) if ((a[i] - b[i]).abs() > 0.001) return false;
+    for (int i = 0; i < a.length; i++) {
+      if ((a[i] - b[i]).abs() > 0.001) return false;
+    }
     return true;
   }
 
   Widget _buildHeaderControl(BuildContext context, PlanningLoaded state) {
     return Container(
       padding: const EdgeInsets.all(12),
-      color: Colors.white.withOpacity(0.9), // 3️⃣ جعل الهيدر شفاف قليلاً ليعطي عمق للتصميم
+      color: Colors.white.withValues(alpha: 0.9), // 3️⃣ جعل الهيدر شفاف قليلاً ليعطي عمق للتصميم
       child: Row(
         children: [
           Expanded(
@@ -268,7 +268,7 @@ class PlanningScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          _statCard("عدد النقلات", "${state.plans.length}", Colors.blue),
+          _statCard("عدد  الاطقم ", "${state.plans.length}", Colors.blue),
           _statCard("إجمالي الهالك", "${totalWaste.toStringAsFixed(2)} م", Colors.orange),
           _statCard("كفاءة التشغيل", "${efficiency.toStringAsFixed(1)}%", Colors.green),
         ],
@@ -299,7 +299,7 @@ class PlanningScreen extends StatelessWidget {
         children: [
           Expanded(flex: 1, child: Text("م", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           Expanded(flex: 3, child: Text("العميل", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          Expanded(flex: 4, child: Text("الرصة", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(flex: 4, child: Text("المقاس", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           Expanded(flex: 2, child: Text("إجمالي", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           Expanded(flex: 1, child: Text("هالك", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
         ],
