@@ -1,4 +1,3 @@
-// screens/planning_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/planning_cubit.dart';
@@ -13,7 +12,6 @@ class PlanningScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // شيلنا لون الخلفية الرمادي القديم عشان الصورة تظهر
       appBar: AppBar(
         title: const Text('جداول تشغيل الماكينة'),
         elevation: 1,
@@ -30,7 +28,6 @@ class PlanningScreen extends StatelessWidget {
           ),
         ],
       ),
-      // 1️⃣ هنا تم إضافة الـ Container كـ خلفية أساسية لشاشة التخطيط
       body: Container(
         decoration: const BoxDecoration(
           image: DecorationImage(
@@ -103,7 +100,7 @@ class PlanningScreen extends StatelessWidget {
                     delegate: SliverChildBuilderDelegate(
                           (context, gIndex) => _buildBatchTable(
                         context,
-                        state.plans,
+                        state,
                         groupedIndices[gIndex],
                         key: PageStorageKey('group_${groupedIndices[gIndex].first}'),
                       ),
@@ -115,7 +112,7 @@ class PlanningScreen extends StatelessWidget {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
-                    child: _buildWaitingSection(state.waitingOrders),
+                    child: _buildWaitingSection(context, state.waitingOrders),
                   ),
                 ),
             ],
@@ -125,7 +122,8 @@ class PlanningScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBatchTable(BuildContext context, List<ProductionPlan> allPlans, List<int> indices, {Key? key}) {
+  Widget _buildBatchTable(BuildContext context, PlanningLoaded state, List<int> indices, {Key? key}) {
+    final allPlans = state.plans;
     final firstPlan = allPlans[indices.first];
     final headerSizes = firstPlan.items.map((e) => e.width.toInt().toString()).join(" + ");
 
@@ -139,10 +137,9 @@ class PlanningScreen extends StatelessWidget {
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10)],
       ),
       child: Material(
-        // 🟢 الحل هنا: إضافة Material شفاف لحماية تأثير ضغط وتوسيع الكارت ومنع الـ Exception
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
-        clipBehavior: Clip.antiAlias, // يضمن قص تأثير الضغط عند الحواف المنحنية للكارت
+        clipBehavior: Clip.antiAlias,
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
@@ -173,11 +170,37 @@ class PlanningScreen extends StatelessWidget {
               style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
             ),
             children: [
-              _buildTableHeader(),
+              _buildTableHeader(), // تم تعديل الهيدر ليحتوي على "عدد البكر" بدلاً من القطر
               ...indices.map((idx) {
                 final plan = allPlans[idx];
-                final customers = plan.items.map((e) => e.customerName).toSet().join(" + ");
-                final sizes = plan.items.map((e) => e.width.toInt().toString()).join(" + ");
+
+                List<String> customerList = [];
+                List<String> priorityList = [];
+                List<String> paperTypeList = [];
+                List<String> countList = []; // 🟢 لستة لحمل عدد البكر (التكرار) لكل مقاس
+                List<String> sizeList = [];
+
+                for (var item in plan.items) {
+                  customerList.add(item.customerName);
+                  sizeList.add("${item.width.toInt()}");
+
+                  // 🟢 عرض عدد البكر المتوفر جوة الـ PlanItem نفسه مباشرة
+                  countList.add("${item.quantity} بكرة");
+
+                  // 🟢 حل مشكلة اختفاء النوع والأولوية:
+                  // لو الموديل بتاع PlanItem عندك لسه مفيش فيه الحقول دي، يفضل تضيفهم فيه وقت التوليد.
+                  // كحل مؤقت بديل للـ waitingOrders، بنقرأ الأولوية والنوع لو متوفرين في الـ item أو بنسيب الحماية:
+                  // (إذا قمت بإضافة priority و paperType لكلاس PlanItem مررهم هنا مباشرة مثل item.priority)
+                  priorityList.add((item as dynamic).toString().contains('priority') ? (item as dynamic).priority : "A");
+                  paperTypeList.add((item as dynamic).toString().contains('paperType') ? (item as dynamic).paperType.toString().toUpperCase() : "FLUTING");
+                }
+
+                final customers = customerList.toSet().join(" + ");
+                final sizes = sizeList.join(" + ");
+                final priorities = priorityList.toSet().join(" + ");
+                final paperTypes = paperTypeList.toSet().join(" + ");
+                final itemCounts = countList.join(" + "); // التكرار المتناسق مع المقاسات
+
                 return Container(
                   decoration: BoxDecoration(
                     border: Border(top: BorderSide(color: Colors.grey.shade200)),
@@ -185,25 +208,30 @@ class PlanningScreen extends StatelessWidget {
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                   child: Row(
-                    // 🟢 يبدأ الصف من اليمين إلى اليسار ليطابق الهيدر
                     textDirection: TextDirection.rtl,
                     children: [
-                      // نفس ترتيب الهيدر بالظبط وبنفس نسب الـ flex:
-                      Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center)),
+                      Expanded(flex: 1, child: Text("${idx + 1}", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
                       Expanded(flex: 3, child: Text(customers, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
-                      Expanded(flex: 4, child: Text(sizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo))),
-                      Expanded(flex: 2, child: Text(plan.totalWidth.toStringAsFixed(2), textAlign: TextAlign.center)),
-                      Expanded(flex: 1, child: Text(plan.waste.toStringAsFixed(2), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
+                      Expanded(flex: 2, child: Text(priorities, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepOrange))),
+                      Expanded(flex: 2, child: Text(paperTypes, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blueGrey))),
+                      Expanded(flex: 2, child: Text("${plan.grams.toInt()} g", textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
+                      Expanded(flex: 3, child: Text(sizes, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 12))),
+                      // 🟢 تم استبدال القطر بـ عدد البكر الفعلي في الطقم الحالي هنا:
+                      Expanded(flex: 2, child: Text(itemCounts, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.purple))),
+                      Expanded(flex: 2, child: Text(plan.totalWidth.toStringAsFixed(1), textAlign: TextAlign.center, style: const TextStyle(fontSize: 12))),
+                      Expanded(flex: 1, child: Text(plan.waste.toStringAsFixed(1), textAlign: TextAlign.center, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12))),
                     ],
                   ),
                 );
               }),
               const SizedBox(height: 8),
-            ],          ),
+            ],
+          ),
         ),
       ),
     );
   }
+
   List<List<int>> _groupPlans(List<ProductionPlan> plans) {
     if (plans.isEmpty) return [];
     List<List<int>> groups = [];
@@ -232,7 +260,7 @@ class PlanningScreen extends StatelessWidget {
   Widget _buildHeaderControl(BuildContext context, PlanningLoaded state) {
     return Container(
       padding: const EdgeInsets.all(12),
-      color: Colors.white.withValues(alpha: 0.9), // 3️⃣ جعل الهيدر شفاف قليلاً ليعطي عمق للتصميم
+      color: Colors.white.withValues(alpha: 0.9),
       child: Row(
         children: [
           Expanded(
@@ -270,7 +298,7 @@ class PlanningScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          _statCard("عدد  الاطقم ", "${state.plans.length}", Colors.blue),
+          _statCard("عدد الاطقم", "${state.plans.length}", Colors.blue),
           _statCard("إجمالي الهالك", "${totalWaste.toStringAsFixed(2)} م", Colors.orange),
           _statCard("كفاءة التشغيل", "${efficiency.toStringAsFixed(1)}%", Colors.green),
         ],
@@ -280,7 +308,7 @@ class PlanningScreen extends StatelessWidget {
 
   Widget _statCard(String title, String value, Color color) => Expanded(
     child: Card(
-      color: Colors.white.withValues(alpha: 0.9), // 4️⃣ كروت الإحصائيات أصبحت متناسقة مع الخلفية
+      color: Colors.white.withValues(alpha: 0.9),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -293,51 +321,120 @@ class PlanningScreen extends StatelessWidget {
     ),
   );
 
+  // 🟢 تعديل رأس الجدول لاستبدال "القطر" بـ "عدد البكر"
   Widget _buildTableHeader() {
     return Container(
       color: Colors.blueGrey.shade50.withValues(alpha: 0.9),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: const Row(
-        // 🟢 يبدأ الصف من اليمين إلى اليسار
         textDirection: TextDirection.rtl,
         children: [
-          // نرتب العناصر في الكود تماماً كما تظهر على الشاشة من اليمين إلى اليسار:
           Expanded(flex: 1, child: Text("م", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           Expanded(flex: 3, child: Text("العميل", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-          Expanded(flex: 4, child: Text("المقاس", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(flex: 2, child: Text("الأولوية", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(flex: 2, child: Text("النوع", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(flex: 2, child: Text("الجرام", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(flex: 3, child: Text("العرض (المقاس)", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+          Expanded(flex: 2, child: Text("عدد البكر", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))), // 🟢 تم التغيير هنا
           Expanded(flex: 2, child: Text("إجمالي", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
           Expanded(flex: 1, child: Text("هالك", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
         ],
       ),
     );
-  }  Widget _buildWaitingSection(List<Order> waiting) {
+  }
+
+  Widget _buildWaitingSection(BuildContext context, List<Order> waiting) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(thickness: 2, color: Colors.white54),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
-            child: const Text("المقاسات المتبقية", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
+                child: const Text(
+                    "المقاسات المتبقية",
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _showForceGenerateConfirmDialog(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrange.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.flash_on, size: 16),
+                label: const Text(
+                    "توليد إجباري (قفل الوردية)",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)
+                ),
+              ),
+            ],
           ),
         ),
         Card(
-          color: Colors.red.shade50.withValues(alpha: 0.92), // 5️⃣ كارت الانتظار ملون خفيف ومقروء جداً
+          color: Colors.red.shade50.withValues(alpha: 0.92),
           child: Column(
             children: waiting.map((order) {
               final remaining = order.quantity - (order.plannedQuantity ?? 0);
               return ListTile(
                 dense: true,
                 title: Text(order.customerName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text("مقاس: ${order.width.toInt()} سم | جرام: ${order.grams.toInt()}", style: TextStyle(color: Colors.grey.shade800)),
+                subtitle: Text("مقاس: ${order.width.toInt()} سم | جرام: ${order.grams.toInt()} | قطر: ${order.diameter.toInt()} سم | نوع: ${order.paperType.toUpperCase()}", style: TextStyle(color: Colors.grey.shade800)),
                 trailing: Text("$remaining بكرة", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
               );
             }).toList(),
           ),
         ),
       ],
+    );
+  }
+
+  void _showForceGenerateConfirmDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          textDirection: TextDirection.rtl,
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.amber),
+            SizedBox(width: 8),
+            Text("تنبيه تشغيل إجباري"),
+          ],
+        ),
+        content: const Text(
+          "هل أنت متأكد من توليد جداول للمقاسات المتبقية حالياً؟\n\n"
+              "تنبيه: هذا الإجراء سيتجاهل شروط الهالك الأدنى (4.70 م) وقد ينتج عنه هالك كبير جداً في العرض المتبقي من الماكينة لتلبية طلباتك.",
+          textDirection: TextDirection.rtl,
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("إلغاء")
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<PlanningCubit>().startGeneration(force: true);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('جاري التوليد الإجباري للمقاسات المتبقية...'),
+                  backgroundColor: Colors.deepOrange,
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange.shade700),
+            child: const Text("توليد فوراً"),
+          ),
+        ],
+      ),
     );
   }
 

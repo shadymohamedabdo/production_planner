@@ -49,7 +49,7 @@ class PlanningCubit extends Cubit<PlanningState> {
     }
   }
 
-  Future<void> startGeneration() async {
+  Future<void> startGeneration({bool force = false}) async {
     final current = state;
     if (current is! PlanningLoaded || current.isGenerating) return;
 
@@ -61,12 +61,16 @@ class PlanningCubit extends Cubit<PlanningState> {
         ...current.availableGrams.where((g) => g != current.selectedGram)
       ];
 
-      // توليد الخطة بناءً على المتبقي الفعلي، مع مراعاة نوع الورق والأولويات وتكرار المقاسات
-      final newPlans = PlanningAlgorithm.generatePlans(current.waitingOrders, priorityGrams);
+      // 🟢 مررنا الـ force للـ Algorithm لتخطي قيود الهالك الأدنى عند قفل الوردية
+      final newPlans = PlanningAlgorithm.generatePlans(
+        current.waitingOrders,
+        priorityGrams,
+        force: force,
+      );
 
       if (newPlans.isEmpty) {
         emit(current.copyWith(isGenerating: false));
-        emit(PlanningError("لا توجد توليفة مناسبة للمقاسات الحالية"));
+        emit(PlanningError(force ? "لا توجد أي مقاسات متبقية لتوليدها إجبارياً" : "لا توجد توليفة مناسبة للمقاسات الحالية"));
         return;
       }
 
@@ -74,7 +78,6 @@ class PlanningCubit extends Cubit<PlanningState> {
       for (var plan in newPlans) {
         for (var item in plan.items) {
           if (item.orderId != 0) {
-            // استهلاك كمية البكر الفعلي بناءً على تكرارها داخل الرصة
             await db.consumeOrder(item.orderId, item.quantity);
           }
         }
@@ -91,7 +94,6 @@ class PlanningCubit extends Cubit<PlanningState> {
       emit(const PlanningError("حدث خطأ أثناء التوليد"));
     }
   }
-
   Future<void> clearHistory() async {
     try {
       await db.clearAllPlans();
