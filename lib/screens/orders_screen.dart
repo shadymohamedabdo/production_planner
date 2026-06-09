@@ -66,6 +66,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
       body: Column(
         children: [
+          // شريط البحث والفلترة
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
             child: Row(
@@ -95,6 +96,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ],
             ),
           ),
+
+          // عرض الجدول العادي المستجيب لحجم الشاشة
           Expanded(
             child: BlocBuilder<OrdersCubit, OrdersState>(
               builder: (context, state) {
@@ -109,7 +112,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   if (filteredOrders.isEmpty) {
                     return _buildEmptyState();
                   }
-                  return _buildScrollableTable(context, filteredOrders);
+                  return _buildResponsiveTable(context, filteredOrders);
                 }
                 return const SizedBox();
               },
@@ -133,7 +136,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }).toList();
   }
 
-  Widget _buildScrollableTable(BuildContext context, List<Order> orders) {
+  // 🟢 رجعنا للـ DataTable الأصلي المريح مع خاصية الـ horizontal margin الـ مدمجة لمنع الـ Overflow وعرض كل الحقول في صفحة واحدة
+// 🟢 التعديل السحري: إجبار الجدول على الفرش بكامل عرض الشاشة ومنع الانكماش الزفت
+  Widget _buildResponsiveTable(BuildContext context, List<Order> orders) {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Card(
@@ -141,34 +146,44 @@ class _OrdersScreenState extends State<OrdersScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Directionality(
           textDirection: TextDirection.rtl,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
-                columns: _buildColumns(),
-                rows: List.generate(
-                  orders.length,
-                      (index) => _buildDataRow(context, orders[index], index),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.vertical,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    // 👈 هنا بنجبر الجدول ياخد عرض الشاشة المتاحة بالكامل كحد أدنى عشان يفرش زى الصورة الأولى
+                    constraints: BoxConstraints(
+                      minWidth: constraints.maxWidth,
+                    ),
+                    child: DataTable(
+                      horizontalMargin: 12,
+                      columnSpacing: 16, // مساحة مريحة وموزعة تلقائياً بين الأعمدة
+                      headingRowColor: WidgetStateProperty.all(Colors.blue.shade50),
+                      columns: _buildColumns(),
+                      rows: List.generate(
+                        orders.length,
+                            (index) => _buildDataRow(context, orders[index], index),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),
     );
   }
-
-  // 🟢 تم التحديث: إضافة أعمدة "النوع" و"الأولوية" للجدول
   List<DataColumn> _buildColumns() {
     return const [
       DataColumn(label: Text('م')),
       DataColumn(label: Text('التاريخ')),
       DataColumn(label: Text('أمر البيع')),
       DataColumn(label: Text('العميل')),
-      DataColumn(label: Text('النوع')),     // 👈 عمود جديد
-      DataColumn(label: Text('الأولوية')),   // 👈 عمود جديد
+      DataColumn(label: Text('النوع')),
+      DataColumn(label: Text('الأولوية')),
       DataColumn(label: Text('العرض')),
       DataColumn(label: Text('القطر')),
       DataColumn(label: Text('الجرام')),
@@ -178,11 +193,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
       DataColumn(label: Text('متوسط البكرة')),
       DataColumn(label: Text('الوزن الكلي')),
       DataColumn(label: Text('الحالة')),
-      DataColumn(label: Text('إجراءات')),
+      DataColumn(label: Text('إجراءات')), // 👈 عمود الإجراءات رجع في نهاية الجدول جهة الشمال تماماً
     ];
   }
 
-  // 🟢 تم التحديث: ربط بيانات الحقول الجديدة بالخلايا مع التلوين
   DataRow _buildDataRow(BuildContext context, Order o, int index) {
     final weightInKg = o.totalTons * 1000;
     final avgRollWeight = o.quantity > 0 ? (weightInKg / o.quantity) : 0;
@@ -197,11 +211,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
         DataCell(Text(o.date.toString().split(' ')[0])),
         DataCell(Text(o.salesOrder ?? '-')),
         DataCell(Text(o.customerName)),
-
-        // خلايا العرض الجديدة
         DataCell(Text(o.paperType.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w500))),
         DataCell(_buildPriorityChip(o.priority)),
-
         DataCell(Text('${o.width.toInt()} سم')),
         DataCell(Text('${o.diameter.toInt()} سم')),
         DataCell(Text('${o.grams.toInt()} g')),
@@ -217,11 +228,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
         DataCell(Text('${avgRollWeight.toStringAsFixed(1)} ك')),
         DataCell(Text('${weightInKg.toInt()} ك')),
         DataCell(_buildStatusChip(o.status)),
+
+        // 🟢 الأزرار رجعت هنا في مكانها الفعلي والظاهر على الشاشة
         DataCell(
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(icon: const Icon(Icons.edit, color: Colors.blue, size: 20), onPressed: () => _showOrderForm(context, order: o)),
-              IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 20), onPressed: () => _confirmDelete(context, o.id!)),
+              IconButton(
+                icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                onPressed: () => _showOrderForm(context, order: o),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                onPressed: () => _confirmDelete(context, o.id!),
+              ),
             ],
           ),
         ),
@@ -229,7 +249,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  // 🟢 دالة منسقة لتلوين شارات الأولويات بذكاء لتسهيل قراءتها
   Widget _buildPriorityChip(String priority) {
     Color chipColor;
     Color textColor;
@@ -251,9 +270,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
         textColor = Colors.grey.shade800;
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(color: chipColor, borderRadius: BorderRadius.circular(6)),
-      child: Text(priority, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 12)),
+      child: Text(priority, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 11)),
     );
   }
 
@@ -278,6 +297,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  // ====================== Dialogs ======================
   Future<void> _showOrderForm(BuildContext context, {Order? order}) async {
     final didSave = await showDialog<bool>(
       context: context,
@@ -330,6 +350,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
               try {
                 await context.read<OrdersCubit>().deleteOrderWithReset(orderId);
                 if (context.mounted) {
+                  context.read<OrdersCubit>().fetchOrders();
+                  _refreshPlanning(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('تم حذف الطلب بنجاح'), backgroundColor: Colors.green),
                   );

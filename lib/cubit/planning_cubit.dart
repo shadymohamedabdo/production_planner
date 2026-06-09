@@ -24,7 +24,7 @@ class PlanningCubit extends Cubit<PlanningState> {
   }
 
   void _processData(List<ProductionPlan> plans, List<Order> allOrders, {double? selectedGram}) {
-    // التعديل: الطلب يظل في قائمة "الانتظار" طالما أن المجدول أقل من الكلي
+    // الأوردر يظل في قائمة الانتظار طالما المجدول أقل من الكلي
     final waiting = allOrders.where((o) {
       int planned = o.plannedQuantity ?? 0;
       int total = o.quantity;
@@ -56,13 +56,13 @@ class PlanningCubit extends Cubit<PlanningState> {
     emit(current.copyWith(isGenerating: true));
 
     try {
-      final priority = [
+      final priorityGrams = [
         current.selectedGram,
         ...current.availableGrams.where((g) => g != current.selectedGram)
       ];
 
-      // توليد الخطة بناءً على المتبقي الفعلي
-      final newPlans = PlanningAlgorithm.generatePlans(current.waitingOrders, priority);
+      // توليد الخطة بناءً على المتبقي الفعلي، مع مراعاة نوع الورق والأولويات وتكرار المقاسات
+      final newPlans = PlanningAlgorithm.generatePlans(current.waitingOrders, priorityGrams);
 
       if (newPlans.isEmpty) {
         emit(current.copyWith(isGenerating: false));
@@ -71,13 +71,10 @@ class PlanningCubit extends Cubit<PlanningState> {
       }
 
       // حفظ واستهلاك الكميات المحددة في كل أوردر
-// 🟢 داخل ملف planning_cubit.dart في دالة startGeneration:
       for (var plan in newPlans) {
         for (var item in plan.items) {
           if (item.orderId != 0) {
-            // بما أن item.quantity = 1 لكل بكرة فريدة في الرصة بالخوارزمية
-            // تأكد أنك تستهلك بمقدار 1، وإذا كانت الرصة تُكرر بناءً على نقلات الماكينة،
-            // اضرب الـ item.quantity في عدد النقلات الفعلي.
+            // استهلاك كمية البكر الفعلي بناءً على تكرارها داخل الرصة
             await db.consumeOrder(item.orderId, item.quantity);
           }
         }
@@ -97,21 +94,16 @@ class PlanningCubit extends Cubit<PlanningState> {
 
   Future<void> clearHistory() async {
     try {
-      // 1. مسح جداول الإنتاج أولاً
       await db.clearAllPlans();
       await db.resetAllOrdersPlanning();
 
-      // 2. نجيب كل الأوردرات اللي في الداتا بيز حالياً
       final allOrders = await db.getAllOrders();
 
-      // 3. نلف عليهم واحد واحد ونستخدم الدالة بتاعتك عشان نصفرهم
       for (var order in allOrders) {
         await db.updateOrderAndResetPlanning(order);
       }
 
-      // 4. تحديث البيانات في الشاشة
       await loadData();
-
       print("تم تصفير كل الطلبات بنجاح");
     } catch (e) {
       emit(PlanningError("فشل مسح السجل: $e"));

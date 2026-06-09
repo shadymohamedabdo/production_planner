@@ -1,13 +1,13 @@
 import '../models/order.dart';
 import '../models/plan.dart';
 
-// الكلاس المسؤول عن توليد خطط الإنتاج
+// الكلاس المسؤول عن توليد خطط الإنتاج المطور
 class PlanningAlgorithm {
 
-  // أقصى عرض للماكينة
+  // أقصى عرض للماكينة (5 متر)
   static const double maxMachineWidth = 5.00;
 
-  // أقل عرض مقبول للتشغيل
+  // أقل عرض مقبول للتشغيل (4.70 متر)
   static const double minMachineWidth = 4.70;
 
   // الدالة الأساسية لتوليد الخطط
@@ -16,223 +16,190 @@ class PlanningAlgorithm {
       List<double> gramPriority,   // ترتيب الجرامات المطلوب تشغيلها
       ) {
 
-    // الليست النهائية اللي هتتشال فيها كل الرصات
     List<ProductionPlan> finalPlans = [];
 
-    // نمشي على كل جرام حسب الأولوية
-    for (double targetGram in gramPriority) {
+    // 1️⃣ استخراج كافة أنواع الورق المتاحة في الطلبات المتبقية (مثال: fluting, liner)
+    // لفصل الإنتاج تماماً بناءً على نوع الخامة
+    List<String> paperTypes = orders.map((o) => o.paperType).toSet().toList();
 
-      // نجيب الأوردرات الخاصة بالجرام الحالي فقط
-      // وكمان لازم تكون حالتها انتظار ولسه فيها كمية
-      List<Order> gramOrders = orders
-          .where((o) =>
-      o.grams == targetGram &&
-          o.status == "انتظار" &&
-          o.quantity > 0)
-          .toList();
+    for (String targetPaperType in paperTypes) {
+      for (double targetGram in gramPriority) {
 
-      // لو مفيش أوردرات بالجرام دا نعديه
-      if (gramOrders.isEmpty) continue;
+        // تصفية الطلبات بناءً على الجرام الحالي ونوع الخامة الحالي وشرط الانتظار
+        List<Order> filteredOrders = orders
+            .where((o) =>
+        o.paperType == targetPaperType &&
+            o.grams == targetGram &&
+            o.status == "انتظار" &&
+            o.quantity > 0)
+            .toList();
 
-      // هنا هنحول كل الأوردرات لبكرات منفصلة
-      // يعني لو أوردر فيه 5 بكرات → يتحول لـ 5 RollUnit
-      List<RollUnit> availableRolls = [];
+        if (filteredOrders.isEmpty) continue;
 
-// 🟢 داخل ملف planning_algorithm.dart ابحث عن اللوب واستبدلها بالتالي:
-      for (var order in gramOrders) {
-        // حساب المتبقي الحقيقي للأوردر قبل تفكيكه لبكرات
-        int planned = order.plannedQuantity ?? 0;
-        int remainingQty = order.quantity - planned;
+        // 2️⃣ ترتيب الأوردرات بناءً على الأولوية (A هو الأهم، ثم B، ثم C...)
+        // لضمان سحب البكر الخاص بالعملاء المهمين أولاً
+        filteredOrders.sort((a, b) => a.priority.compareTo(b.priority));
 
-        // لو الأوردر اكتمل فعلياً تخطيه تماماً ولا تولد له بكرات
-        if (remainingQty <= 0) continue;
+        // تحويل الأوردرات إلى بكرات منفصلة (RollUnit) مع الحفاظ على ترتيب الأولويات
+        List<RollUnit> availableRolls = [];
+        int rollCounter = 0; // معرف فريد لكل بكرة فيزيائية مستقلة عن الـ orderId
 
-        // التكرار بناءً على المتبقي وليس الكلي!
-        for (int i = 0; i < remainingQty; i++) {
-          availableRolls.add(
-            RollUnit(
-              orderId: order.id ?? 0,
-              customerName: order.customerName,
-              widthMeters: order.width / 100,
-              widthCm: order.width,
+        for (var order in filteredOrders) {
+          int planned = order.plannedQuantity ?? 0;
+          int remainingQty = order.quantity - planned;
+
+          if (remainingQty <= 0) continue;
+
+          for (int i = 0; i < remainingQty; i++) {
+            rollCounter++;
+            availableRolls.add(
+              RollUnit(
+                uniqueRollId: rollCounter, // معرف البكرة الفريد
+                orderId: order.id ?? 0,
+                customerName: order.customerName,
+                widthMeters: order.width / 100,
+                widthCm: order.width,
+                priority: order.priority,
+              ),
+            );
+          }
+        }
+
+        // بدء تكوين الرصات التجميعية بناءً على البكر المتاح المرتب بالأولويات
+        while (true) {
+          CombinationResult bestResult = _findBestCombination(availableRolls);
+
+          // لو لم يجد توليفة تحقق الحد الأدنى للتشغيل نوقف اللوب لهذا الجرام والخامة
+          if (bestResult.selectedRolls.isEmpty || bestResult.total < minMachineWidth) {
+            break;
+          }
+
+          // تجميع عناصر الرصة الحالية ودمج المتشابه لتسهيل القراءة وتحديث الداتابيز بصورة صحيحة
+          // تجميع الـ PlanItems بناءً على الـ orderId
+          Map<int, PlanItem> itemsMap = {};
+
+          for (var roll in bestResult.selectedRolls) {
+            if (itemsMap.containsKey(roll.orderId)) {
+              // لو العميل تكرر مقاسه في نفس الرصة (مثلاً ضربنا البكرة في 5) نزود الـ quantity
+              itemsMap[roll.orderId] = PlanItem(
+                orderId: roll.orderId,
+                customerName: roll.customerName,
+                width: roll.widthCm,
+                quantity: itemsMap[roll.orderId]!.quantity + 1,
+              );
+            } else {
+              itemsMap[roll.orderId] = PlanItem(
+                orderId: roll.orderId,
+                customerName: roll.customerName,
+                width: roll.widthCm,
+                quantity: 1,
+              );
+            }
+
+            // إزالة البكرة المستخدمة من المتاح نهائياً بناءً على الـ uniqueRollId الفريد لها
+            availableRolls.removeWhere((r) => r.uniqueRollId == roll.uniqueRollId);
+          }
+
+          // إضافة خطة الإنتاج المعتمدة للرصة الحالية
+          finalPlans.add(
+            ProductionPlan(
+              date: DateTime.now(),
+              grams: targetGram,
+              items: itemsMap.values.toList(),
+              totalWidth: bestResult.total,
+              waste: maxMachineWidth - bestResult.total,
             ),
           );
         }
-      }
-      // لوب مستمرة لتكوين الرصات
-      while (true) {
-
-        // البحث عن أفضل توليفة ممكنة
-        CombinationResult bestResult =
-        _findBestCombination(availableRolls);
-
-        // لو ملقاش توليفة مناسبة يوقف
-        if (bestResult.selectedRolls.isEmpty ||
-            bestResult.total < minMachineWidth) {
-          break;
-        }
-
-        // عناصر الرصة الحالية
-        List<PlanItem> currentItems = [];
-
-        // نمشي على البكرات اللي اختارها
-        for (var roll in bestResult.selectedRolls) {
-
-          // نضيفها للرصة
-          currentItems.add(
-            PlanItem(
-              orderId: roll.orderId,
-              customerName: roll.customerName,
-              width: roll.widthCm,
-              quantity: 1,
-            ),
-          );
-
-          // نحذف البكرة من المتاح
-          // عشان متستخدمش تاني
-          availableRolls.remove(roll);
-        }
-
-        // إنشاء خطة إنتاج جديدة
-        finalPlans.add(
-          ProductionPlan(
-            date: DateTime.now(),
-
-            // الجرام الحالي
-            grams: targetGram,
-
-            // البكرات اللي اتجمعت
-            items: currentItems,
-
-            // إجمالي العرض
-            totalWidth: bestResult.total,
-
-            // الهالك = أقصى عرض - المستخدم
-            waste: maxMachineWidth - bestResult.total,
-          ),
-        );
       }
     }
 
-    // نرجع كل الرصات النهائية
     return finalPlans;
   }
 
-  // ============================================
-  // دالة البحث عن أفضل توليفة
-  // ============================================
+  // ==========================================================
+  // دالة البحث عن أفضل توليفة (تسمح بتكرار الأوردر ومقاس العميل)
+  // ==========================================================
+  static CombinationResult _findBestCombination(List<RollUnit> rolls) {
+    CombinationResult best = CombinationResult([], 0);
 
-  static CombinationResult _findBestCombination(
-      List<RollUnit> rolls) {
-
-    // أفضل نتيجة لحد دلوقتي
-    CombinationResult best =
-    CombinationResult([], 0);
-
-    // دالة Backtracking
+    // دالة الـ Backtracking المطورة
     void backtrack(
         int index,
         List<RollUnit> current,
         double total,
-        Set<int> usedOrderIds,
+        Set<int> usedRollIds, // نمنع تكرار "البكرة نفسها" وليس "الأوردر نفسه"
         ) {
 
-      // لو العرض عدى الحد الأقصى نوقف
+      // تجاوز الحد الأقصى لعرض السكين (5 متر) -> نرفض التوليفة
       if (total > maxMachineWidth) return;
 
-      // لو دخلنا في الرينج المطلوب
-      if (total >= minMachineWidth &&
-          total <= maxMachineWidth) {
-
-        // لو النتيجة الحالية أفضل من القديمة
+      // لو دخلنا في النطاق الإنتاجي المسموح للماكينة
+      if (total >= minMachineWidth && total <= maxMachineWidth) {
+        // نختار التوليفة اللي بتقربنا أكتر للـ 5 متر (أقل هالك)
         if (total > best.total) {
-
-          // نخزنها كأفضل توليفة
-          best = CombinationResult(
-            List.from(current),
-            total,
-          );
+          best = CombinationResult(List.from(current), total);
         }
-
-        // لو وصلنا 5 متر بالظبط خلاص ممتاز
+        // لو قفلت 5 متر بالظبط نخرج فوراً لأنها النتيجة المثالية
         if (total == maxMachineWidth) return;
       }
 
-      // نمشي على كل البكرات
       for (int i = index; i < rolls.length; i++) {
-
         RollUnit roll = rolls[i];
 
-        // الشرط المهم:
-        // مينفعش نفس الأوردر يدخل مرتين
-        if (!usedOrderIds.contains(roll.orderId)) {
-
-          // نضيف البكرة الحالية
+        // التحقق من أن البكرة الحالية لم يتم سحبها في نفس الرصة
+        if (!usedRollIds.contains(roll.uniqueRollId)) {
           current.add(roll);
+          usedRollIds.add(roll.uniqueRollId);
 
-          // نسجل الـ ID إنه اتستخدم
-          usedOrderIds.add(roll.orderId);
-
-          // نكمل البحث
+          // استدعاء ريكيرجن لباقي العناصر (البكرة التالية i + 1)
           backtrack(
             i + 1,
             current,
             total + roll.widthMeters,
-            usedOrderIds,
+            usedRollIds,
           );
 
-          // Backtracking
-          // نرجع الحالة زي ما كانت
-          usedOrderIds.remove(roll.orderId);
+          // التراجع (Backtrack) لإيجاد احتمالات أخرى
+          usedRollIds.remove(roll.uniqueRollId);
           current.removeLast();
         }
       }
     }
 
-    // بدء البحث
+    // بدء البحث الفعلي من أول عنصر في الليست (المرتبة بالأولوية تلقائياً)
     backtrack(0, [], 0, {});
 
-    // إرجاع أفضل توليفة
     return best;
   }
 }
 
 // ============================================
-// كلاس يمثل بكرة واحدة فقط
+// كلاس يمثل بكرة فيزيائية مستقلة واحدة
 // ============================================
-
 class RollUnit {
-
-  // رقم الأوردر
+  final int uniqueRollId; // المعرّف الفريد للبكرة عشان نقدر نكرر نفس الـ orderId
   final int orderId;
-
-  // اسم العميل
   final String customerName;
-
-  // العرض بالمتر
   final double widthMeters;
-
-  // العرض بالسم
   final double widthCm;
+  final String priority;
 
   RollUnit({
+    required this.uniqueRollId,
     required this.orderId,
     required this.customerName,
     required this.widthMeters,
     required this.widthCm,
+    required this.priority,
   });
 }
 
 // ============================================
 // كلاس النتيجة النهائية للتوليفة
 // ============================================
-
 class CombinationResult {
-
-  // البكرات المختارة
   final List<RollUnit> selectedRolls;
-
-  // إجمالي العرض
   final double total;
 
   CombinationResult(
