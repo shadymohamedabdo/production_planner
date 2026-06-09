@@ -15,10 +15,12 @@ class OrderForm extends StatefulWidget {
 class _OrderFormState extends State<OrderForm> {
   final _formKey = GlobalKey<FormState>();
   final _customerController = TextEditingController();
-
-  // الكنترولر والمتغير الخاصين بالتاريخ
   final _dateController = TextEditingController();
   late DateTime _selectedDate;
+
+  // 🟢 المتغيرات الخاصة بالحقول الجديدة مع قيمها الافتراضية
+  String _selectedPaperType = 'fluting';
+  String _selectedPriority = 'C';
 
   final List<Map<String, dynamic>> _orderRows = [];
 
@@ -32,11 +34,15 @@ class _OrderFormState extends State<OrderForm> {
   void initState() {
     super.initState();
     if (widget.order != null) {
-      // حالة التعديل: جلب التاريخ المسجل للأوردر وعرضه
+      // حالة التعديل: جلب البيانات المسجلة مسبقاً وعرضها بالفورم
       _selectedDate = widget.order!.date;
       _dateController.text = _selectedDate.toString().split(' ')[0];
-
       _customerController.text = widget.order!.customerName;
+
+      // جلب قيم الخامات والأولويات للتعديل
+      _selectedPaperType = widget.order!.paperType;
+      _selectedPriority = widget.order!.priority;
+
       _orderRows.add({
         'salesOrder': TextEditingController(text: widget.order!.salesOrder ?? ''),
         'width': TextEditingController(text: widget.order!.width.toString()),
@@ -46,14 +52,13 @@ class _OrderFormState extends State<OrderForm> {
         'diameter': widget.order!.diameter,
       });
     } else {
-      // حالة إضافة جديد: يفتح تلقائياً على تاريخ النهاردة
+      // حالة إضافة جديد: فتح تلقائي على تاريخ اليوم
       _selectedDate = DateTime.now();
       _dateController.text = _selectedDate.toString().split(' ')[0];
       _addNewRow();
     }
   }
 
-  // دالة فتح التقويم (DatePicker) لاختيار اليوم والشهر والسنة
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -70,7 +75,7 @@ class _OrderFormState extends State<OrderForm> {
             ),
           ),
           child: Directionality(
-            textDirection: TextDirection.rtl, // جعل التقويم يفتح بواجهة عربية متناسقة
+            textDirection: TextDirection.rtl,
             child: child!,
           ),
         );
@@ -131,20 +136,22 @@ class _OrderFormState extends State<OrderForm> {
   Widget build(BuildContext context) {
     final isEditing = widget.order != null;
     return Directionality(
-      textDirection: TextDirection.rtl, // 🟢 إجبار الـ Dialog بالكامل ليعمل بالاتجاه العربي الصحيح
+      textDirection: TextDirection.rtl,
       child: AlertDialog(
         title: Text(isEditing ? 'تعديل الطلب' : 'إضافة أوردرات متعددة'),
         content: SizedBox(
-          width: 1100,
+          width: 1200, // تمت زيادة العرض قليلاً ليتناسق مع الحقول الجديدة
           child: Form(
             key: _formKey,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // 🟢 صف البيانات الأساسية (محدث بالكامل ليشمل نوع البكرة والأولوية)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // حقل اسم العميل
                       Expanded(
                         flex: 3,
                         child: TextFormField(
@@ -158,11 +165,57 @@ class _OrderFormState extends State<OrderForm> {
                           value == null || value.trim().isEmpty ? 'اسم العميل مطلوب' : null,
                         ),
                       ),
-                      const SizedBox(width: 15),
+                      const SizedBox(width: 12),
 
-                      // حقل التاريخ المطور بالكامل
+                      // 🟢 حقل اختيار نوع البكرة
                       Expanded(
-                        flex: 1,
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedPaperType,
+                          decoration: const InputDecoration(
+                            labelText: 'نوع الورق/البكرة',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.layers_outlined, color: Colors.blue),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'fluting', child: Text('Fluet')),
+                            DropdownMenuItem(value: 'liner', child: Text('Liner')),
+                            DropdownMenuItem(value: 'test liner', child: Text('Test Liner')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setState(() => _selectedPaperType = val);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // 🟢 حقل اختيار أولوية العميل
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedPriority,
+                          decoration: const InputDecoration(
+                            labelText: 'أولوية العميل',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.star_border_rounded, color: Colors.amber),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'A', child: Text('A (أهم عميل)')),
+                            DropdownMenuItem(value: 'B', child: Text('B')),
+                            DropdownMenuItem(value: 'C', child: Text('C (عادي)')),
+                            DropdownMenuItem(value: 'D', child: Text('D')),
+                            DropdownMenuItem(value: 'F', child: Text('F (يؤجل)')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setState(() => _selectedPriority = val);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // حقل التاريخ المطور
+                      Expanded(
+                        flex: 2,
                         child: MouseRegion(
                           cursor: SystemMouseCursors.click,
                           child: TextFormField(
@@ -201,7 +254,6 @@ class _OrderFormState extends State<OrderForm> {
           ),
         ),
         actions: [
-          // تم تبديل الترتيب ليناسب الـ RTL الطبيعي (الإلغاء يسار، الحفظ يمين)
           ElevatedButton(
             onPressed: () => _handleSave(isEditing),
             child: Text(isEditing ? 'تحديث البيانات' : 'حفظ الكل'),
@@ -220,13 +272,10 @@ class _OrderFormState extends State<OrderForm> {
         color: Colors.blue.shade50,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
-        textDirection: TextDirection.rtl, // 🟢 تأكيد بدء الهيدر من اليمين
-        children: const [
-          SizedBox(
-              width: 40,
-              child: Text("م", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))
-          ),
+      child: const Row(
+        textDirection: TextDirection.rtl,
+        children: [
+          SizedBox(width: 40, child: Text("م", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
           SizedBox(width: 5),
           Expanded(flex: 2, child: Text("رقم S.O", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
           SizedBox(width: 5),
@@ -239,7 +288,7 @@ class _OrderFormState extends State<OrderForm> {
           Expanded(flex: 2, child: Text("طن", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
           SizedBox(width: 5),
           Expanded(flex: 1, child: Text("بكر", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
-          SizedBox(width: 40), // مساحة موازية لزر الحذف لضمان السنترة الكاملة
+          SizedBox(width: 40),
         ],
       ),
     );
@@ -254,9 +303,8 @@ class _OrderFormState extends State<OrderForm> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
-        textDirection: TextDirection.rtl, // 🟢 إجبار سطر البيانات على البدء من اليمين تماماً كالهيدر
+        textDirection: TextDirection.rtl,
         children: [
-          // 1️⃣ رقم المسلسل (أقصى اليمين تماماً)
           SizedBox(
             width: 40,
             child: Text(
@@ -266,8 +314,6 @@ class _OrderFormState extends State<OrderForm> {
             ),
           ),
           const SizedBox(width: 5),
-
-          // 2️⃣ رقم S.O
           Expanded(
             flex: 2,
             child: TextFormField(
@@ -278,17 +324,14 @@ class _OrderFormState extends State<OrderForm> {
                 hintText: '#',
                 contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               ),
-              validator: (value) =>
-              value == null || value.trim().isEmpty ? 'مطلوب' : null,
+              validator: (value) => value == null || value.trim().isEmpty ? 'مطلوب' : null,
             ),
           ),
           const SizedBox(width: 5),
-
-          // 3️⃣ القطر
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<double>(
-              initialValue: row['diameter'],
+              value: row['diameter'],
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -304,8 +347,6 @@ class _OrderFormState extends State<OrderForm> {
             ),
           ),
           const SizedBox(width: 5),
-
-          // 4️⃣ العرض
           Expanded(
             flex: 2,
             child: TextFormField(
@@ -326,8 +367,6 @@ class _OrderFormState extends State<OrderForm> {
             ),
           ),
           const SizedBox(width: 5),
-
-          // 5️⃣ الجرام
           Expanded(
             flex: 2,
             child: TextFormField(
@@ -347,8 +386,6 @@ class _OrderFormState extends State<OrderForm> {
             ),
           ),
           const SizedBox(width: 5),
-
-          // 6️⃣ طن
           Expanded(
             flex: 2,
             child: TextFormField(
@@ -371,8 +408,6 @@ class _OrderFormState extends State<OrderForm> {
             ),
           ),
           const SizedBox(width: 5),
-
-          // 7️⃣ بكر (الخانات المحسوبة تلقائياً)
           Expanded(
             flex: 1,
             child: TextFormField(
@@ -388,8 +423,6 @@ class _OrderFormState extends State<OrderForm> {
               ),
             ),
           ),
-
-          // 8️⃣ زر الحذف (أقصى اليسار تماماً)
           SizedBox(
             width: 40,
             child: IconButton(
@@ -434,6 +467,9 @@ class _OrderFormState extends State<OrderForm> {
           diameterWeight: _diameterSpecs[row['diameter']]!,
           status: 'انتظار',
           plannedQuantity: 0,
+          // 🟢 تمرير البيانات الجديدة إلى الموديل عند الحفظ والتحديث
+          paperType: _selectedPaperType,
+          priority: _selectedPriority,
         ));
       }
 

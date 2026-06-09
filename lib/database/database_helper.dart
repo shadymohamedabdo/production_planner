@@ -23,7 +23,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6, // تم الترقية لـ 6 لدعم الحسابات الجزئية للبكر
+      version: 7, // 🟢 تم الترقية لـ 7 لدعم نوع البكرة والأولوية للعملاء
       onCreate: (db, version) async {
         // orders
         await db.execute('''
@@ -39,7 +39,9 @@ class DatabaseHelper {
             totalTons REAL,
             status TEXT DEFAULT 'انتظار',
             diameter REAL,
-            diameterWeight REAL
+            diameterWeight REAL,
+            paperType TEXT DEFAULT 'fluting', -- 👈 الحقل الجديد لنوع البكرة
+            priority TEXT DEFAULT 'C'          -- 👈 الحقل الجديد لأولوية العميل
           )
         ''');
         // production_plans
@@ -75,9 +77,7 @@ class DatabaseHelper {
           try {
             await db.execute('''CREATE TABLE production_plans(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, grams REAL, totalWidth REAL, waste REAL)''');
             await db.execute('''CREATE TABLE plan_items(id INTEGER PRIMARY KEY AUTOINCREMENT, planId INTEGER, orderId INTEGER, customerName TEXT, width REAL, quantity INTEGER)''');
-          } catch (e) {
-
-          }
+          } catch (e) {}
         }
         if (oldVersion < 5) {
           try { await db.execute("ALTER TABLE orders ADD COLUMN salesOrder TEXT"); } catch (e) {}
@@ -85,12 +85,18 @@ class DatabaseHelper {
         if (oldVersion < 6) {
           try { await db.execute("ALTER TABLE orders ADD COLUMN plannedQuantity INTEGER DEFAULT 0"); } catch (e) {}
         }
+        // 🟢 الترقية للإصدار 7: إضافة الأعمدة الجديدة بأمان للاحتفاظ ببيانات العميل المخزنة
+        if (oldVersion < 7) {
+          try { await db.execute("ALTER TABLE orders ADD COLUMN paperType TEXT DEFAULT 'fluting'"); } catch (_) {}
+          try { await db.execute("ALTER TABLE orders ADD COLUMN priority TEXT DEFAULT 'C'"); } catch (_) {}
+        }
       },
     );
   }
+
   // دالة مسؤولة عن خصم البكر المستخدمة من الأوردر
-// وتحديث plannedQuantity والحالة (انتظار / تم الجدول)
-// بعد كل عملية تخطيط أو إنتاج
+  // وتحديث plannedQuantity والحالة (انتظار / تم الجدول)
+  // بعد كل عملية تخطيط أو إنتاج
   Future<void> consumeOrder(int orderId, int usedQty) async {
     final dbClient = await database;
     await dbClient.transaction((txn) async {
@@ -113,6 +119,7 @@ class DatabaseHelper {
       );
     });
   }
+
   Future<int> insertOrder(Order order) async {
     final dbClient = await database;
     return await dbClient.insert('orders', order.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
@@ -188,21 +195,20 @@ class DatabaseHelper {
     }
     return plansMap.values.toList();
   }
+
   // جلب جميع خطط الإنتاج المحفوظة مع تفاصيل كل رصة وربطها بعناصرها من الداتابيز
   Future<List<ProductionPlan>> getAllProductionPlans() async {
     return await getSavedPlans();
   }
-  // تحديث الأوردر وتصفير المجدول
-// تحديث الأوردر وتصفير المجدول (تم إصلاحها لتحديث كافة الحقول المتغيرة)
-// تحديث الأوردر وتصفير المجدول (تم إصلاحها لتحديث كافة الحقول المتغيرة)
-// 🟢 تحديث الأوردر وتصفير المجدول (تمت معالجة المشكلة وتحديث كافة الحقول)
+
+  // 🟢 تحديث الأوردر وتصفير المجدول (تمت معالجة المشكلة وتحديث كافة الحقول بما فيها الحقول الجديدة للعميل)
   Future<int> updateOrderAndResetPlanning(Order order) async {
     final dbClient = await database;
 
-    // 1️⃣ تحويل كائن الـ Order بالكامل إلى Map (ليشمل الاسم، الطن، الـ S.O، القطر، التاريخ، وباقي البيانات)
+    // 1️⃣ تحويل كائن الـ Order بالكامل إلى Map ليشمل الحقول الأساسية والجديدة (paperType و priority)
     Map<String, dynamic> updatedData = order.toMap();
 
-    // 2️⃣ إجبار قيم التخطيط على التصفير وإعادة التهيئة كما ترغب في هذا الإجراء
+    // 2️⃣ إجبار قيم التخطيط على التصفير وإعادة التهيئة
     updatedData['plannedQuantity'] = 0;
     updatedData['status'] = 'انتظار';
 
@@ -213,17 +219,21 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [order.id],
     );
-  }  Future<void> resetAllOrdersPlanning() async {
+  }
+
+  Future<void> resetAllOrdersPlanning() async {
     final dbClient = await database;
     await dbClient.update(
       'orders',
       {'plannedQuantity': 0, 'status': 'انتظار'},
     );
   }
+
   Future<int> clearAllOrders() async {
     final db = await database;
     return await db.delete('orders');
   }
+
   Future<void> clearAllPlans() async {
     final dbClient = await database;
     await dbClient.delete('production_plans');

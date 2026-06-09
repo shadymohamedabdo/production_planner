@@ -24,24 +24,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
       appBar: AppBar(
         title: const Text('سجل الطلبات'),
         actions: [
-          // 🟢 الزر الجديد للانتقال السريع لشاشة التخطيط والمحاكاة
-// 🟢 الزر المطور للانتقال السريع لشاشة التخطيط والمحاكاة مع التحديث التلقائي
           IconButton(
             icon: const Icon(Icons.analytics_outlined, color: Colors.indigo),
             tooltip: 'التخطيط والمحاكاة',
             onPressed: () async {
-              // 1️⃣ الانتظار حتى يغلق المستخدم شاشة التخطيط ويعود
               await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const PlanningScreen()),
               );
-
-              // 2️⃣ بمجرد العودة، يتم تحديث الكيوبيت تلقائياً لجلب البيانات الجديدة من الداتا بيز
               if (context.mounted) {
                 context.read<OrdersCubit>().fetchOrders();
               }
             },
-          ),          // زر التحديث الحالي
+          ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.blue),
             tooltip: 'تحديث البيانات',
@@ -57,21 +52,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
               );
             },
           ),
-          // زر مسح الكل الحالي
           IconButton(
             icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
             onPressed: () => _confirmClear(context),
             tooltip: 'مسح الكل',
           ),
         ],
-      ),      floatingActionButton: FloatingActionButton.extended(
-      onPressed: () => _showOrderForm(context),
-      label: const Text('طلب جديد'),
-      icon: const Icon(Icons.add),
-    ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showOrderForm(context),
+        label: const Text('طلب جديد'),
+        icon: const Icon(Icons.add),
+      ),
       body: Column(
         children: [
-          // شريط البحث والفلتر
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
             child: Row(
@@ -101,8 +95,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ],
             ),
           ),
-
-          // الجدول (الحل النهائي للـ Overflow)
           Expanded(
             child: BlocBuilder<OrdersCubit, OrdersState>(
               builder: (context, state) {
@@ -147,7 +139,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
       child: Card(
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        // 🟢 التغيير هنا: تغليف الجدول بـ Directionality لعرضه من اليمين إلى اليسار
         child: Directionality(
           textDirection: TextDirection.rtl,
           child: SingleChildScrollView(
@@ -168,12 +159,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
     );
   }
+
+  // 🟢 تم التحديث: إضافة أعمدة "النوع" و"الأولوية" للجدول
   List<DataColumn> _buildColumns() {
     return const [
       DataColumn(label: Text('م')),
       DataColumn(label: Text('التاريخ')),
       DataColumn(label: Text('أمر البيع')),
       DataColumn(label: Text('العميل')),
+      DataColumn(label: Text('النوع')),     // 👈 عمود جديد
+      DataColumn(label: Text('الأولوية')),   // 👈 عمود جديد
       DataColumn(label: Text('العرض')),
       DataColumn(label: Text('القطر')),
       DataColumn(label: Text('الجرام')),
@@ -187,6 +182,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     ];
   }
 
+  // 🟢 تم التحديث: ربط بيانات الحقول الجديدة بالخلايا مع التلوين
   DataRow _buildDataRow(BuildContext context, Order o, int index) {
     final weightInKg = o.totalTons * 1000;
     final avgRollWeight = o.quantity > 0 ? (weightInKg / o.quantity) : 0;
@@ -201,6 +197,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
         DataCell(Text(o.date.toString().split(' ')[0])),
         DataCell(Text(o.salesOrder ?? '-')),
         DataCell(Text(o.customerName)),
+
+        // خلايا العرض الجديدة
+        DataCell(Text(o.paperType.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w500))),
+        DataCell(_buildPriorityChip(o.priority)),
+
         DataCell(Text('${o.width.toInt()} سم')),
         DataCell(Text('${o.diameter.toInt()} سم')),
         DataCell(Text('${o.grams.toInt()} g')),
@@ -228,6 +229,34 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  // 🟢 دالة منسقة لتلوين شارات الأولويات بذكاء لتسهيل قراءتها
+  Widget _buildPriorityChip(String priority) {
+    Color chipColor;
+    Color textColor;
+    switch (priority) {
+      case 'A':
+        chipColor = Colors.red.shade100;
+        textColor = Colors.red.shade900;
+        break;
+      case 'B':
+        chipColor = Colors.orange.shade100;
+        textColor = Colors.orange.shade900;
+        break;
+      case 'C':
+        chipColor = Colors.blue.shade100;
+        textColor = Colors.blue.shade900;
+        break;
+      default:
+        chipColor = Colors.grey.shade200;
+        textColor = Colors.grey.shade800;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: chipColor, borderRadius: BorderRadius.circular(6)),
+      child: Text(priority, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 12)),
+    );
+  }
+
   (Color, Color) _getRemainingColors(int remaining) {
     if (remaining < 0) return (Colors.red.shade100, Colors.red.shade900);
     if (remaining > 0) return (Colors.orange.shade100, Colors.orange.shade900);
@@ -249,13 +278,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  // ====================== Dialogs ======================
   Future<void> _showOrderForm(BuildContext context, {Order? order}) async {
     final didSave = await showDialog<bool>(
       context: context,
       builder: (_) => OrderForm(order: order),
-    ) ??
-        false;
+    ) ?? false;
 
     if (didSave && context.mounted) {
       context.read<OrdersCubit>().fetchOrders();
@@ -299,26 +326,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           TextButton(
             onPressed: () async {
-              Navigator.pop(ctx); // إغلاق الـ Dialog أولاً
-
+              Navigator.pop(ctx);
               try {
                 await context.read<OrdersCubit>().deleteOrderWithReset(orderId);
-
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('تم حذف الطلب بنجاح'),
-                      backgroundColor: Colors.green,
-                    ),
+                    const SnackBar(content: Text('تم حذف الطلب بنجاح'), backgroundColor: Colors.green),
                   );
                 }
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('فشل الحذف: $e'),
-                      backgroundColor: Colors.red,
-                    ),
+                    SnackBar(content: Text('فشل الحذف: $e'), backgroundColor: Colors.red),
                   );
                 }
               }
@@ -329,6 +348,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
     );
   }
+
   void _refreshPlanning(BuildContext context) {
     try {
       context.read<PlanningCubit>().loadData();
